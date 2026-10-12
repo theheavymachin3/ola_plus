@@ -7,8 +7,8 @@
 #
 # When the target is the machine's own architecture the build is native; otherwise it is
 # cross-compiled (a host-side ola_protoc_plugin is built first and reused, which is OLA's own
-# cross-compile mechanism). The package version comes from the commit, not from the clock, so
-# every architecture built from one commit gets the same version, and it grows with new commits.
+# cross-compile mechanism). The package version comes from packaging/VERSION and the commit (or
+# tag), not from the clock, so every architecture built from one commit gets the same version.
 set -euo pipefail
 
 ARCH=${1:?usage: build-arch.sh <amd64|arm64|armhf> <ui-dist-dir> <out-dir>}
@@ -45,8 +45,23 @@ MULTIARCH=$(dpkg-architecture -a"$ARCH" -qDEB_HOST_MULTIARCH)
 TRIPLET=$(dpkg-architecture -a"$ARCH" -qDEB_HOST_GNU_TYPE)
 
 git config --global --add safe.directory "$REPO"
+# Version scheme (no epoch). packaging/VERSION holds the number of the NEXT release:
+#   tag v0.11.0       -> 0.11.0              a release
+#   tag v0.11.0-rc1   -> 0.11.0~rc1          a release candidate (sorts before 0.11.0)
+#   any other commit  -> 0.11.0~git<time>+g<hash>   a snapshot (sorts before 0.11.0, after any
+#                        earlier release, and grows with each commit)
+# VERSION must be above 0.10.9 (what the old Debian-based packages used) so it is an upgrade.
+PRODUCT=$(tr -d '[:space:]' < packaging/VERSION)
 STAMP=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d%H%M%S)
-VERSION="0.10.9+plus${STAMP}+g$(git rev-parse --short HEAD)"
+if [ "${GITHUB_REF_TYPE:-}" = tag ]; then
+  case "$GITHUB_REF_NAME" in
+    "v$PRODUCT") VERSION="$PRODUCT" ;;
+    "v$PRODUCT"-rc[0-9]*) VERSION="$PRODUCT~rc${GITHUB_REF_NAME##*-rc}" ;;
+    *) echo "tag $GITHUB_REF_NAME does not match packaging/VERSION ($PRODUCT): bump the file or fix the tag" >&2; exit 1 ;;
+  esac
+else
+  VERSION="$PRODUCT~git${STAMP}+g$(git rev-parse --short HEAD)"
+fi
 echo "building ola-plus $VERSION for $ARCH ($([ "$CROSS" = 1 ] && echo "cross, from $BUILD_ARCH" || echo native))"
 
 autoreconf -i

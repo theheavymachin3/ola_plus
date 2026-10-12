@@ -77,3 +77,17 @@ docker run --rm -v "$PWD:/work" -w /work debian:trixie   bash packaging/deb/buil
 `build-arch.sh` builds natively when the target is the machine's own architecture and cross-compiles
 otherwise, then `build-deb.sh` assembles the package from a `make install` tree configured with
 `--prefix=/usr --sysconfdir=/etc --localstatedir=/var --libdir=/usr/lib/<multiarch>`.
+
+## Making a release
+
+`packaging/VERSION` holds the number of the **next** release (now above 0.10.9, so a Plus package always upgrades
+the old Debian-based ones). Between releases CI builds snapshots versioned `0.11.0~git<time>+g<hash>`, which sort
+before the release itself.
+
+1. Make sure `packaging/VERSION` is the number you want, and `master` is green.
+2. Tag it and push the tag: `git tag v0.11.0 && git push origin v0.11.0` (a release candidate is `v0.11.0-rc1`).
+3. CI builds the three packages, installs each over the Debian `ola` in a container of its architecture, and only
+   then opens a **draft** release with `OlaPlus-v0.11.0-amd64.deb`, `-arm64.deb`, `-armhf.deb` and `SHA256SUMS`.
+   It refuses a tag that doesn't match `packaging/VERSION`.
+4. Read the draft, then press **Publish** (nothing is public until you do).
+5. Bump `packaging/VERSION` for the next release.

@@ -7,6 +7,7 @@ name: ola-plus
 on:
   push:
     branches: [master]
+    tags: ['v*']
     paths:
       - 'ui/**'
       - 'olad/**'
@@ -141,13 +142,13 @@ jobs:
         if: always()
         run: cat "$RUNNER_TEMP/olad.log" || true
 
-  # Manual only: builds the ola-plus Debian package for amd64, arm64 and armhf (32-bit
+  # Run by hand (workflow_dispatch) or when a v* tag is pushed: builds the ola-plus Debian package for amd64, arm64 and armhf (32-bit
   # Raspberry Pi OS) in a Debian trixie container, so library versions match what runs it.
   # amd64 and arm64 build natively (arm64 on GitHub's ARM runners); armhf is cross-compiled.
   # See packaging/deb/build-arch.sh, which is also how to reproduce a package locally.
   deb:
     name: deb (${{ matrix.arch }})
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     needs: ui
     strategy:
       fail-fast: false
@@ -176,12 +177,12 @@ jobs:
           name: ola-plus-deb-${{ matrix.arch }}
           path: out/*.deb
 
-  # Manual only: installs each package over the Debian ola package in a container of its own
+  # Same triggers: installs each package over the Debian ola package in a container of its own
   # architecture (native for amd64 and arm64, QEMU for armhf), runs olad from it, checks the
   # UI and API, and rolls back to ola.
   deb-test:
     name: deb-test (${{ matrix.arch }})
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     needs: deb
     strategy:
       fail-fast: false
@@ -205,3 +206,41 @@ jobs:
       - name: Replace Debian ola with ola-plus, run it, roll back
         run: |
           docker run --rm --platform ${{ matrix.platform }} -v "$PWD:/work" -w /work debian:trixie             bash /work/packaging/deb/test-install.sh /work/deb /work
+
+  # When a v* tag is pushed and every package built and installed, collect them under friendly
+  # names (OlaPlus-v0.11.0-arm64.deb), add checksums and open a DRAFT release for review. A draft is
+  # invisible to the public until someone presses Publish, so a tag can never publish by itself.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [deb, deb-test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ola-plus-deb-*
+          merge-multiple: true
+          path: debs
+      - name: Collect the release files
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          NAME="OlaPlus-${TAG}"
+          WANT="${TAG#v}"; WANT="${WANT/-rc/~rc}"   # v0.11.0-rc1 is Debian version 0.11.0~rc1
+          mkdir out
+          for f in debs/ola-plus_*.deb; do
+            [ "$(dpkg-deb -f "$f" Version)" = "$WANT" ] || { echo "$f has version $(dpkg-deb -f "$f" Version), expected $WANT" >&2; exit 1; }
+            arch=$(dpkg-deb -f "$f" Architecture)
+            cp "$f" "out/${NAME}-${arch}.deb"
+          done
+          [ "$(ls out | wc -l)" = 3 ] || { echo "expected 3 packages, found:"; ls out; exit 1; }
+          (cd out && sha256sum *.deb > SHA256SUMS && cat SHA256SUMS)
+          sed -e "s/@TAG@/$TAG/g" -e "s/@NAME@/$NAME/g" packaging/release-notes.md > notes.md
+      - name: Open a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=""
+          case "$GITHUB_REF_NAME" in *-rc*) flags="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" out/* --draft $flags --verify-tag             --title "OLA Plus ${GITHUB_REF_NAME#v}" --notes-file notes.md --generate-notes
