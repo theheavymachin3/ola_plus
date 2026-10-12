@@ -90,6 +90,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/olacfg"
           ./olad/olad --config-dir "$RUNNER_TEMP/olacfg" --log-level 3 --http-port 9090 \
+            --http-data-dir "$GITHUB_WORKSPACE/olad/www" \
             --ui-dir "$GITHUB_WORKSPACE/ui/dist" \
             > "$RUNNER_TEMP/olad.log" 2>&1 &
           for i in $(seq 1 30); do

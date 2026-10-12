@@ -933,7 +933,8 @@ int HTTPServer::ServeStaticDirectory(const static_directory &dir,
   }
   *handled = true;
 
-  if (request->Method() != "GET" && request->Method() != "HEAD") {
+  // (HandleRequest only ever dispatches GET and POST.)
+  if (request->Method() != "GET") {
     return ServeNotFound(response);
   }
 
