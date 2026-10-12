@@ -1,96 +1,106 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { fixtureStore as store } from '../lib/fixtures/store.svelte';
   import { patch } from '../lib/patch.svelte';
-  import DevicePorts from './DevicePorts.svelte';
-  import UniverseCard from './UniverseCard.svelte';
+  import AddFixtureDialog from './AddFixtureDialog.svelte';
+  import FixtureRow from './FixtureRow.svelte';
+  import ProfileLibrary from './ProfileLibrary.svelte';
+  import UniverseGrid from './UniverseGrid.svelte';
 
-  let view = $state<'universes' | 'devices'>('universes');
+  let universe = $state(1);
+  let selected = $state<string | null>(null);
+  let dialog = $state<null | 'add' | 'library'>(null);
+
+  // Universes known to olad plus any a fixture already points at.
+  const universeIds = $derived(
+    [...new Set([...patch.universes.map((u) => u.id), ...store.universeIds(), universe])].sort((a, b) => a - b),
+  );
+  const list = $derived(store.inUniverse(universe));
+  const used = $derived(
+    list.reduce((n, f) => n + (store.lookup(f.profileId)?.modes[f.mode]?.channels.length ?? 0), 0),
+  );
+  const clashCount = $derived(list.filter((f) => store.conflicts.has(f.id)).length);
 
   onMount(() => patch.watch());
 </script>
 
-<div class="patch">
+<div class="fx">
   <div class="bar">
-    <div class="seg" role="tablist">
-      <button class:on={view === 'universes'} onclick={() => (view = 'universes')}>By universe</button>
-      <button class:on={view === 'devices'} onclick={() => (view = 'devices')}>By device</button>
-    </div>
-    <span class="spacer"></span>
-    <button onclick={() => patch.newUniverse('')}>+ Universe</button>
-  </div>
-
-  {#if patch.error}<p class="err" role="alert">{patch.error}</p>{/if}
-  {#if patch.limited}
-    <p class="note">
-      This olad lists only the first free port of devices like Art-Net or sACN; the others appear as you
-      patch. An OLA Plus build of olad shows them all.
-    </p>
-  {/if}
-
-  {#if !patch.loaded && !patch.error}
-    <p class="dim">Loading…</p>
-  {:else if view === 'universes'}
-    <div class="grid">
-      {#each patch.universes as u (u.id)}
-        <UniverseCard universe={u} />
-      {:else}
-        <p class="dim">No universes yet. Create one, or patch a port from the “By device” tab.</p>
+    <div class="chips" role="tablist" aria-label="Universe">
+      {#each universeIds as u (u)}
+        <button role="tab" aria-selected={u === universe} class:on={u === universe} onclick={() => ((universe = u), (selected = null))}>
+          U{u}{#if patch.universe(u)} <small>{patch.universe(u)?.name}</small>{/if}
+        </button>
       {/each}
     </div>
-  {:else}
-    <DevicePorts />
-  {/if}
+    <span class="spacer"></span>
+    <button onclick={() => (dialog = 'library')}>Profiles</button>
+    <button class="primary" onclick={() => (dialog = 'add')}>+ Fixtures</button>
+  </div>
+
+  <p class="muted stats">
+    {list.length} fixture{list.length === 1 ? '' : 's'} · {used}/512 channels used
+    {#if clashCount}<span class="bad"> · {clashCount} in conflict</span>{/if}
+  </p>
+
+  <UniverseGrid {universe} {selected} onselect={(id) => (selected = id)} />
+
+  <div class="list">
+    {#each list as f (f.id)}
+      <FixtureRow fixture={f} selected={selected === f.id} onselect={() => (selected = f.id)} />
+    {:else}
+      <p class="muted">No fixtures on U{universe}. Add some to give channels names and avoid address clashes.</p>
+    {/each}
+  </div>
 </div>
 
+{#if dialog === 'add'}
+  <AddFixtureDialog {universe} onclose={() => (dialog = null)} onlibrary={() => (dialog = 'library')} />
+{:else if dialog === 'library'}
+  <ProfileLibrary onclose={() => (dialog = null)} />
+{/if}
+
 <style>
-  .patch {
+  .fx {
     flex: 1;
     min-height: 0;
     overflow: auto;
     padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
   .bar {
     display: flex;
+    align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
-    margin-bottom: 12px;
+  }
+  .chips {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .chips button.on {
+    background: var(--fill);
+    border-color: var(--fill);
+  }
+  .chips small {
+    opacity: 0.8;
   }
   .spacer {
     flex: 1;
   }
-  .seg {
-    display: flex;
+  .stats {
+    margin: 0;
   }
-  .seg button {
-    border-radius: 0;
-  }
-  .seg button:first-child {
-    border-radius: 8px 0 0 8px;
-  }
-  .seg button:last-child {
-    border-radius: 0 8px 8px 0;
-  }
-  .seg button.on {
-    background: var(--fill);
-    border-color: var(--fill);
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
-    gap: 12px;
-    align-items: start;
-  }
-  .err {
+  .bad {
     color: var(--bad);
+    font-weight: 700;
   }
-  .dim {
-    color: var(--dim);
-  }
-  .note {
-    margin: 0 0 12px;
-    padding: 8px 12px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    color: var(--accent);
-    font-size: 0.85rem;
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 </style>

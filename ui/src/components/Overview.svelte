@@ -103,7 +103,7 @@
       <h3>Devices</h3>
       <dl>
         <dt>Devices</dt><dd>{devices.length}</dd>
-        <dt>Ports patched</dt><dd>{stagePorts} of {patch.ports.length}</dd>
+        <dt>Ports routed</dt><dd>{stagePorts} of {patch.ports.length}</dd>
         <dt>Plugins running</dt><dd>{activePlugins.length} of {pluginStore.plugins.length}</dd>
       </dl>
       <button onclick={() => onnavigate('plugins')}>Plugins</button>
@@ -139,7 +139,7 @@
           </footer>
         </article>
       {:else}
-        <p class="muted">No universes yet. Patch a port in the Patch tab to create one.</p>
+        <p class="muted">No universes yet. Route a port in the Routing tab to create one.</p>
       {/each}
     </div>
   </section>
@@ -150,7 +150,7 @@
       {#each devices as d (d.alias)}
         <div class="device">
           <strong title={d.name}>{d.name}</strong>
-          <span class="muted">{d.inputs.length} in · {d.outputs.length} out · {d.patched} patched</span>
+          <span class="muted">{d.inputs.length} in · {d.outputs.length} out · {d.patched} routed</span>
           <span class="dots" aria-hidden="true">
             {#each [...d.inputs, ...d.outputs] as p (p.id)}
               <i class:on={p.universe !== null} class:out={p.isOutput}></i>
@@ -161,7 +161,7 @@
         <p class="muted">No devices found.</p>
       {/each}
     </div>
-    <button class="link" onclick={() => onnavigate('patch')}>Open Patch</button>
+    <button class="link" onclick={() => onnavigate('routing')}>Open Routing</button>
   </section>
 </div>
 

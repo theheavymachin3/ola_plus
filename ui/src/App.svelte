@@ -3,9 +3,9 @@
   import Mixer from './components/Mixer.svelte';
   import Monitor from './components/Monitor.svelte';
   import Overview from './components/Overview.svelte';
-  import Fixtures from './components/Fixtures.svelte';
   import Patch from './components/Patch.svelte';
   import Plugins from './components/Plugins.svelte';
+  import Routing from './components/Routing.svelte';
   import Scenes from './components/Scenes.svelte';
   import { fixtureStore } from './lib/fixtures/store.svelte';
   import { groupStore } from './lib/groups/store.svelte';
@@ -13,14 +13,14 @@
   import { sceneStore } from './lib/scenes/store.svelte';
   import { syncSummary } from './lib/sync/summary.svelte';
 
-  type Tab = 'overview' | 'mixer' | 'monitor' | 'scenes' | 'patch' | 'fixtures' | 'plugins';
+  type Tab = 'overview' | 'mixer' | 'monitor' | 'scenes' | 'routing' | 'patch' | 'plugins';
   const TABS: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'mixer', label: 'Mixer' },
     { id: 'monitor', label: 'Monitor' },
     { id: 'scenes', label: 'Scenes' },
+    { id: 'routing', label: 'Routing' },
     { id: 'patch', label: 'Patch' },
-    { id: 'fixtures', label: 'Fixtures' },
     { id: 'plugins', label: 'Plugins' },
   ];
 
@@ -74,10 +74,10 @@
   <Monitor />
 {:else if tab === 'scenes'}
   <Scenes />
+{:else if tab === 'routing'}
+  <Routing />
 {:else if tab === 'patch'}
   <Patch />
-{:else if tab === 'fixtures'}
-  <Fixtures />
 {:else}
   <Plugins />
 {/if}

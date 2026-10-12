@@ -10,9 +10,9 @@ It talks to `olad` over the HTTP API `olad` already exposes.
 | Monitor | The 512 channels of the selected universe as a live grid (about 5 updates a second), as 0–255, % or hex. Changed channels flash, coloured edges mark fixtures, tap a channel (or use the arrow keys) to see which fixture and channel it is. Shows what olad outputs, whoever is sending. |
 | Mixer | Faders per channel or per fixture, master, blackout. Works with mouse, touch and keyboard. |
 | Groups | In the Mixer tab: a master fader (0–100%) for a set of fixtures and/or channels, e.g. "Front wash". Scales only the output, so the levels underneath are untouched. |
-| Scenes | Record the lit channels as a scene. Tap to fade to it (per-scene fade time), hold **Bump** to flash it over the mix. A scene is a *look* (replaces everything) or an *accent* (only its own channels). |
-| Patch | Universe ↔ input/output port patching, HTP/LTP, port priority; by universe or by device. |
-| Fixtures | DMX addressing with conflict detection; profiles from the Open Fixture Library. |
+| Scenes | Record the lit channels as a scene. Tap to fade to it (per-scene fade time) and tap again to switch it off; hold **Bump** to flash it over the mix. A scene is a *look* (replaces everything) or an *accent* (only its own channels). |
+| Routing | Which input and output ports feed which universe (what OLA calls patching a port), HTP/LTP, port priority; by universe or by device. |
+| Patch | Fixtures and their DMX addresses, with conflict detection and profiles from the Open Fixture Library. |
 | Plugins | Enable/disable plugins, reload. |
 
 ## Run it
@@ -39,8 +39,8 @@ olad --ui-dir /path/to/ui/dist
 
 Works against stock olad 0.10.x. An OLA Plus build adds `/json/patch_overview`, which returns
 every device and port in one request. Stock `olad` only reports the first free port of devices
-like Art-Net or sACN, so without it the Patch tab shows a notice and some ports appear only as
-you patch the earlier ones.
+like Art-Net or sACN, so without it the Routing tab shows a notice and some ports appear only as
+you route the earlier ones.
 
 Fixtures, profiles, scenes and groups are stored on olad (`/json/ui_store`, `/ui_store`; files
 `ola-ui-<key>.json` in its config directory) and shared by every device that opens the UI. Each document has a
@@ -69,4 +69,4 @@ bash ci/smoke-ui-hosting.sh http://127.0.0.1:9090                              #
 ```
 
 CI (`.github/workflows/ola-plus.yml`) builds `olad` from this tree and runs all of the above
-against it. The `olad-armhf` job (manual) cross-builds a Raspberry Pi OS (32-bit) binary.
+against it. The manual `deb-armhf` and `deb-test` jobs build the `ola-plus` Debian package for Raspberry Pi OS (32-bit) and check it installs over the Debian `ola` package (see `packaging/deb/README.md`).

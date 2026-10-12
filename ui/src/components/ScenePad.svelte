@@ -7,14 +7,21 @@
   let { scene, onedit }: { scene: Scene; onedit: () => void } = $props();
 
   const fading = $derived(player.fadingId === scene.id);
+  const fadingOut = $derived(fading && player.fadingDir === 'out');
   const bumping = $derived(player.bumpId === scene.id);
   // "Active" is what the stage actually shows, not just what was last pressed.
   const active = $derived(!fading && sceneMatches(scene, mixer.levels));
+  // On while it sits at its levels or is fading up to them. A tap then switches it off;
+  // a tap on anything else (including mid fade-out) switches it on.
+  const on = $derived(active || (fading && !fadingOut));
+
+  const toggle = () => (on ? player.off(scene) : player.go(scene));
+  const state = $derived(fadingOut ? 'fading out' : fading ? 'fading in' : active ? 'on' : '');
 </script>
 
 <div class="pad" class:active class:fading class:bumping>
-  <button class="go" onclick={() => player.go(scene)} aria-label="Go {scene.name}">
-    <span class="name">{scene.name}</span>
+  <button class="go" onclick={toggle} aria-pressed={on} aria-label="{scene.name}: tap to switch {on ? 'off' : 'on'}">
+    <span class="name">{scene.name}{#if state}<em>{state}</em>{/if}</span>
     <small>
       {scene.fade > 0 ? `${scene.fade}s fade` : 'snap'} · {scene.levels.length} ch · {scene.replace ? 'look' : 'accent'}
     </small>
@@ -66,6 +73,18 @@
     font-weight: 700;
     font-size: 1.05rem;
     overflow-wrap: anywhere;
+  }
+  .name em {
+    margin-left: 8px;
+    font-size: 0.7rem;
+    font-style: normal;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--good);
+  }
+  .pad.fading .name em {
+    color: var(--accent);
   }
   small {
     color: var(--dim);

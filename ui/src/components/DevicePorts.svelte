@@ -24,7 +24,7 @@
             <span class="lbl">{p.description || p.id}</span>
             <PriorityControl port={p} />
             <select value={p.universe === null ? '' : String(p.universe)} onchange={(e) => assign(p, e.currentTarget.value)} aria-label="Universe for {p.description}">
-              <option value="">— not patched —</option>
+              <option value="">— not routed —</option>
               {#each patch.universes as u (u.id)}
                 <option value={String(u.id)}>U{u.id} · {u.name}</option>
               {/each}

@@ -59,7 +59,7 @@ export function activity(dmx: ArrayLike<number> | undefined): { active: number; 
   return { active, peak };
 }
 
-export type Goto = 'patch' | 'fixtures' | 'plugins';
+export type Goto = 'routing' | 'patch' | 'plugins';
 export interface Notice {
   severity: 'warn' | 'info';
   text: string;
@@ -84,7 +84,7 @@ export function buildNotices(i: NoticeInput): Notice[] {
     out.push({
       severity: 'warn',
       text: `${i.fixtureConflicts} fixture${i.fixtureConflicts === 1 ? '' : 's'} overlap on the same DMX addresses.`,
-      goto: 'fixtures',
+      goto: 'patch',
     });
   }
   for (const u of i.universes) {
@@ -92,14 +92,14 @@ export function buildNotices(i: NoticeInput): Notice[] {
       out.push({
         severity: 'warn',
         text: `U${u.universe.id} has no output: nothing physical receives it.`,
-        goto: 'patch',
+        goto: 'routing',
       });
     }
     if (u.inputs.length > 1) {
       out.push({
         severity: 'info',
         text: `U${u.universe.id} merges ${u.inputs.length} inputs (${u.universe.mergeMode}).`,
-        goto: 'patch',
+        goto: 'routing',
       });
     }
   }
@@ -125,7 +125,7 @@ export function buildNotices(i: NoticeInput): Notice[] {
     out.push({
       severity: 'info',
       text: 'This olad lists only some free ports; the patch view may not show every device port.',
-      goto: 'patch',
+      goto: 'routing',
     });
   }
   return out;

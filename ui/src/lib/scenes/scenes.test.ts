@@ -6,6 +6,7 @@ import {
   lerpLevels,
   recordLevels,
   sceneMatches,
+  sceneOffTarget,
   sceneTarget,
   SLOTS,
   type Scene,
@@ -43,6 +44,30 @@ describe('sceneTarget', () => {
   });
   it('an empty look is a blackout target', () => {
     expect(sceneTarget(scene([]), now)).toEqual(zeros());
+  });
+});
+
+describe('sceneOffTarget', () => {
+  it('zeroes the own channels of the scene and leaves the rest', () => {
+    const now = withLevels([[0, 100], [1, 50], [7, 9]]);
+    const off = sceneOffTarget(scene([[0, 100], [1, 50]]), now);
+    expect([off[0], off[1], off[7]]).toEqual([0, 0, 9]);
+  });
+  it('does not change the input', () => {
+    const now = withLevels([[0, 100]]);
+    sceneOffTarget(scene([[0, 100]]), now);
+    expect(now[0]).toBe(100);
+  });
+  it('turns an active look into a dark stage', () => {
+    const s = scene([[2, 200], [3, 40]]);
+    const stage = sceneTarget(s, zeros());
+    expect(sceneMatches(s, stage)).toBe(true);
+    expect(sceneOffTarget(s, stage)).toEqual(zeros());
+  });
+  it('is idempotent', () => {
+    const s = scene([[1, 10]]);
+    const once = sceneOffTarget(s, withLevels([[1, 10], [4, 4]]));
+    expect(sceneOffTarget(s, once)).toEqual(once);
   });
 });
 

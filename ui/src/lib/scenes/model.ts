@@ -41,6 +41,17 @@ export function sceneTarget(scene: Pick<Scene, 'levels' | 'replace'>, current: A
   return target;
 }
 
+/**
+ * The levels after switching a scene off: its own channels go to 0 and everything else is left
+ * alone. For a look that is active (so nothing else is lit) this is a dark stage; for an
+ * accent it removes just the accent.
+ */
+export function sceneOffTarget(scene: Pick<Scene, 'levels'>, current: ArrayLike<number>): number[] {
+  const target = Array.from({ length: SLOTS }, (_, i) => current[i] ?? 0);
+  for (const [ch] of scene.levels) if (ch >= 0 && ch < SLOTS) target[ch] = 0;
+  return target;
+}
+
 /** True when `levels` is exactly where firing the scene would leave things. */
 export function sceneMatches(scene: Pick<Scene, 'levels' | 'replace'>, levels: ArrayLike<number>): boolean {
   const own = new Map(scene.levels);

@@ -25,8 +25,8 @@
   </div>
 
   <p class="hint muted">
-    Tap a scene to fade to it. Hold <em>Bump</em> to flash it on top of the mix; let go and it disappears.
-    Moving a fader by hand stops a fade.
+    Tap a scene to fade to it, tap it again to switch it off. Hold <em>Bump</em> to flash it on top of the mix; let go and it
+    disappears. Moving a fader by hand stops a fade.
   </p>
 
   <div class="grid">

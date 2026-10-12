@@ -1,3 +1,5 @@
+// State and actions for the Routing tab: which input/output ports feed which universe (OLA calls
+// this "patching" a port; the UI's Patch tab is about fixtures and DMX addresses).
 import {
   createUniverse,
   fetchFreePorts,

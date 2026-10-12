@@ -27,7 +27,7 @@
       </div>
     </section>
   {:else}
-    <p class="muted">No fixtures patched on U{mixer.universe}. Add some in the Fixtures tab.</p>
+    <p class="muted">No fixtures patched on U{mixer.universe}. Add some in the Patch tab.</p>
   {/each}
 </div>
 

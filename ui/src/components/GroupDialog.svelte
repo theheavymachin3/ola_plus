@@ -64,7 +64,7 @@
           <span>{f.name} <small class="muted">ch {formatRange(spanOf(f, fixtureStore.lookup))}</small></span>
         </label>
       {:else}
-        <p class="muted">No fixtures patched on U{universe}. Add some in the Fixtures tab, or use channels below.</p>
+        <p class="muted">No fixtures patched on U{universe}. Add some in the Patch tab, or use channels below.</p>
       {/each}
     </fieldset>
 
