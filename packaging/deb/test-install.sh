@@ -33,7 +33,8 @@ apt-get install -y --no-install-recommends "$DEB_DIR"/ola-plus_*.deb
 installed ola-plus || fail "ola-plus is not installed"
 installed ola && fail "Debian ola should have been replaced"
 installed libola1t64 && fail "Debian libola1t64 should have been replaced"
-[ "$(cat /etc/ola/ola-artnet.conf)" = "enabled = false" ] || fail "configuration was not kept"
+kept() { grep -qx 'enabled = false' /etc/ola/ola-artnet.conf; }
+kept || fail "configuration was not kept"
 echo "/etc/ola is $(stat -c '%U:%G %a' /etc/ola); olad groups: $(id -nG olad)"
 id -nG olad | tr ' ' '\n' | grep -qx dialout || fail "olad is not in dialout"
 
@@ -71,6 +72,8 @@ apt-get remove -y ola-plus
 installed ola-plus && fail "ola-plus should be removed"
 apt-get install -y --no-install-recommends ola
 installed ola || fail "could not reinstall Debian ola"
-[ "$(cat /etc/ola/ola-artnet.conf)" = "enabled = false" ] || fail "configuration lost on rollback"
+# olad rewrites plugin settings when it starts (adding defaults), so check the setting, not the file.
+echo "--- /etc/ola/ola-artnet.conf after the rollback:"; cat /etc/ola/ola-artnet.conf
+kept || fail "configuration lost on rollback"
 [ -f /etc/ola/ola-ui-deb-test.json ] || fail "shared documents lost on rollback"
 echo "OK"
