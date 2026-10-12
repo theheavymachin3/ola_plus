@@ -78,6 +78,8 @@ class OladHTTPServer: public ola::http::OlaHTTPServer {
                        ola::http::HTTPResponse *response);
   int JsonAvailablePorts(const ola::http::HTTPRequest *request,
                          ola::http::HTTPResponse *response);
+  int JsonPatchOverview(const ola::http::HTTPRequest *request,
+                        ola::http::HTTPResponse *response);
   int CreateNewUniverse(const ola::http::HTTPRequest *request,
                         ola::http::HTTPResponse *response);
   int ModifyUniverse(const ola::http::HTTPRequest *request,
@@ -125,6 +127,19 @@ class OladHTTPServer: public ola::http::OlaHTTPServer {
   void HandleCandidatePorts(ola::http::HTTPResponse *response,
                             const client::Result &result,
                             const std::vector<client::OlaDevice> &devices);
+
+  void HandleDevicesForOverview(ola::http::HTTPResponse *response,
+                                const client::Result &result,
+                                const std::vector<client::OlaDevice> &devices);
+
+  void HandleUniversesForOverview(
+      ola::http::HTTPResponse *response,
+      ola::web::JsonObject *json,
+      const client::Result &result,
+      const std::vector<client::OlaUniverse> &universes);
+
+  void AddPortUniverse(ola::web::JsonObject *json,
+                       const client::OlaPort &port);
 
   void CreateUniverseComplete(ola::http::HTTPResponse *response,
                               unsigned int universe_id,

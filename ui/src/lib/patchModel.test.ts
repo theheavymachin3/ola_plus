@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { RawPort, RawUniverseInfo } from './api';
-import { buildModel, groupByDevice, nextFreeUniverse, universeWarnings, portsOf } from './patchModel';
+import type { PatchOverview, RawPort, RawUniverseInfo } from './api';
+import { buildModel, buildModelFromOverview, groupByDevice, nextFreeUniverse, universeWarnings, portsOf } from './patchModel';
 
 const port = (id: string, device = 'Dev', extra: Partial<RawPort> = {}): RawPort => ({
   device,
@@ -45,6 +45,42 @@ describe('buildModel', () => {
     ).ports[0];
     expect(none.priority).toBeNull();
     expect(full.priority).toEqual({ mode: 'inherit', value: 50, capability: 'full' });
+  });
+});
+
+describe('buildModelFromOverview', () => {
+  const overview: PatchOverview = {
+    devices: [
+      {
+        alias: 4,
+        name: 'ArtNet',
+        plugin_id: 2,
+        ports: [
+          { ...port('4-I-0'), universe: 1 },
+          { ...port('4-I-1'), universe: null },
+          { ...port('4-O-0'), universe: null },
+        ],
+      },
+      { alias: 1, name: 'Dummy', plugin_id: 1, ports: [{ ...port('1-O-0', 'Dummy'), universe: 2 }] },
+    ],
+    universes: [
+      { id: 2, name: 'B', merge_mode: 'LTP' },
+      { id: 1, name: 'A', merge_mode: 'HTP' },
+    ],
+  };
+  const m = buildModelFromOverview(overview);
+
+  it('keeps every port, including free ones beyond the first', () => {
+    expect(m.ports.map((p) => p.id)).toEqual(['1-O-0', '4-I-0', '4-O-0', '4-I-1']);
+  });
+  it('maps universe or null per port', () => {
+    expect(m.ports.map((p) => p.universe)).toEqual([2, 1, null, null]);
+  });
+  it('sorts universes and keeps merge mode', () => {
+    expect(m.universes).toEqual([
+      { id: 1, name: 'A', mergeMode: 'HTP' },
+      { id: 2, name: 'B', mergeMode: 'LTP' },
+    ]);
   });
 });
 

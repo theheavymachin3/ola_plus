@@ -20,6 +20,12 @@
   </div>
 
   {#if patch.error}<p class="err" role="alert">{patch.error}</p>{/if}
+  {#if patch.limited}
+    <p class="note">
+      This olad lists only the first free port of devices like Art-Net or sACN; the others appear as you
+      patch. An OLA Plus build of olad shows them all.
+    </p>
+  {/if}
 
   {#if !patch.loaded && !patch.error}
     <p class="dim">Loading…</p>
@@ -78,5 +84,13 @@
   }
   .dim {
     color: var(--dim);
+  }
+  .note {
+    margin: 0 0 12px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--accent);
+    font-size: 0.85rem;
   }
 </style>

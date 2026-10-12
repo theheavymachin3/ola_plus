@@ -7,6 +7,7 @@ import {
   createUniverse,
   fetchDmx,
   fetchFreePorts,
+  fetchPatchOverview,
   fetchPluginInfo,
   fetchUniverseInfo,
   fetchUniverseList,
@@ -15,7 +16,7 @@ import {
   sendDmx,
   type RawPort,
 } from './api';
-import { buildModel } from './patchModel';
+import { buildModel, buildModelFromOverview } from './patchModel';
 
 const base = process.env.OLA_URL;
 const UNIVERSE = 41; // unlikely to clash with a user's rig on a dev machine
@@ -68,6 +69,28 @@ describe.skipIf(!base)('UI api client against a real olad', () => {
     const model = buildModel(details, await fetchFreePorts());
     expect(model.ports.find((p) => p.id === port.id)?.universe).toBe(UNIVERSE);
     expect(model.universes.some((u) => u.id === UNIVERSE)).toBe(true);
+  });
+
+  it('serves the whole patch in one request (OLA Plus patch_overview)', async () => {
+    const overview = await fetchPatchOverview();
+    expect(overview, 'olad built from this tree must serve /json/patch_overview').not.toBeNull();
+    const all = overview!.devices.flatMap((d) => d.ports);
+    expect(all.length).toBeGreaterThan(0);
+    for (const p of all) {
+      expect(p.id).toMatch(/^\d+-[IO]-\d+$/);
+      expect(p.universe === null || typeof p.universe === 'number').toBe(true);
+    }
+    // The patched port reports its universe; the universe list carries name and merge mode.
+    expect(all.find((p) => p.id === port.id)?.universe).toBe(UNIVERSE);
+    const u = overview!.universes.find((x) => x.id === UNIVERSE);
+    expect(u?.name).toBe('ci universe');
+    expect(['HTP', 'LTP']).toContain(u?.merge_mode);
+    // It is a superset of get_ports, which hides ports beyond the first per device.
+    const listed = new Set(all.map((p) => p.id));
+    for (const f of await fetchFreePorts()) expect(listed.has(f.id)).toBe(true);
+    // And the model built from it agrees with the per-universe one.
+    const m = buildModelFromOverview(overview!);
+    expect(m.ports.find((p) => p.id === port.id)?.universe).toBe(UNIVERSE);
   });
 
   it('renames and changes merge mode (name is mandatory on modify)', async () => {

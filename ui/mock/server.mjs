@@ -2,6 +2,10 @@
 // Same endpoints/shapes as olad/OladHTTPServer.cpp. Run: npm run mock
 import http from 'node:http';
 
+// MOCK_STOCK=1 behaves like stock olad 0.10.x: no /json/patch_overview, and get_ports
+// hides all but the first free port of each device direction.
+const STOCK = process.env.MOCK_STOCK === '1';
+
 // --- devices & ports -------------------------------------------------------
 const ports = new Map(); // id -> {device, description, id, is_output, cap, mode, value, universe}
 const addPort = (alias, device, dir, n, description, cap = 'none') =>
@@ -114,7 +118,28 @@ http
     }
     if (path === '/json/get_ports') {
       const only = q.get('id') === null ? null : Number(q.get('id'));
-      return send(res, [...ports.values()].filter((p) => p.universe === null || p.universe === only).map(toPort));
+      let free = [...ports.values()].filter((p) => p.universe === null || p.universe === only);
+      if (STOCK) {
+        // Stock olad stops at the first free port per device and direction.
+        const seen = new Set();
+        free = free.filter((p) => {
+          const k = p.id.split('-').slice(0, 2).join('-');
+          return seen.has(k) ? false : (seen.add(k), true);
+        });
+      }
+      return send(res, free.map(toPort));
+    }
+    if (path === '/json/patch_overview' && !STOCK) {
+      const devices = new Map();
+      for (const p of ports.values()) {
+        const alias = Number(p.id.split('-')[0]);
+        if (!devices.has(alias)) devices.set(alias, { alias, name: p.device, plugin_id: 0, ports: [] });
+        devices.get(alias).ports.push({ ...toPort(p), universe: p.universe });
+      }
+      return send(res, {
+        devices: [...devices.values()],
+        universes: universeIds().map((id) => ({ id, name: meta.get(id)?.name ?? '', merge_mode: meta.get(id)?.merge ?? 'LTP' })),
+      });
     }
     if (path === '/json/plugin_info') {
       const p = plugins.find((x) => x.id === Number(q.get('id')));
@@ -168,4 +193,4 @@ http
     }
     send(res, 'not found', 404);
   })
-  .listen(9090, () => console.log('mock olad on http://127.0.0.1:9090'));
+  .listen(Number(process.env.MOCK_PORT ?? 9090), () => console.log('mock olad up'));

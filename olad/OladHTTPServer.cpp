@@ -108,6 +108,8 @@ OladHTTPServer::OladHTTPServer(ExportMap *export_map,
                   &OladHTTPServer::JsonUniversePluginList);
   RegisterHandler("/json/plugin_info", &OladHTTPServer::JsonPluginInfo);
   RegisterHandler("/json/get_ports", &OladHTTPServer::JsonAvailablePorts);
+  RegisterHandler("/json/patch_overview",
+                  &OladHTTPServer::JsonPatchOverview);
   RegisterHandler("/json/universe_info", &OladHTTPServer::JsonUniverseInfo);
 
   // these are the static files for the old UI
@@ -579,6 +581,32 @@ int OladHTTPServer::JsonAvailablePorts(const HTTPRequest *request,
                           &OladHTTPServer::HandleCandidatePorts,
                           response));
   }
+  return MHD_YES;
+}
+
+
+/**
+ * @brief Return every device and port, and which universe each is patched to.
+ *
+ * /json/get_ports only lists ports that can still be patched, and for devices
+ * that don't allow multi port patching it stops at the first one, so it can't
+ * be used to draw the whole patch. This returns everything in one request.
+ * @param request the HTTPRequest
+ * @param response the HTTPResponse
+ * @returns MHD_NO or MHD_YES
+ */
+int OladHTTPServer::JsonPatchOverview(const HTTPRequest *request,
+                                      HTTPResponse *response) {
+  if (request->CheckParameterExists(HELP_PARAMETER)) {
+    return ServeUsage(response,
+                      "Every device and port, with the universe each is "
+                      "patched to, plus the universe list");
+  }
+  m_client.FetchDeviceInfo(
+      ola::OLA_PLUGIN_ALL,
+      NewSingleCallback(this,
+                        &OladHTTPServer::HandleDevicesForOverview,
+                        response));
   return MHD_YES;
 }
 
@@ -1088,6 +1116,106 @@ void OladHTTPServer::HandleCandidatePorts(
   response->SetContentType(HTTPServer::CONTENT_TYPE_PLAIN);
   response->SendJson(json);
   delete response;
+}
+
+
+/**
+ * @brief Build the device / port half of the patch overview, then fetch the
+ * universe list to complete it.
+ * @param response the HTTPResponse that is associated with the request.
+ * @param result the result of the API call
+ * @param devices all the devices and their ports
+ */
+void OladHTTPServer::HandleDevicesForOverview(
+    HTTPResponse *response,
+    const client::Result &result,
+    const vector<OlaDevice> &devices) {
+  if (!result.Success()) {
+    m_server.ServeError(response, result.Error());
+    return;
+  }
+
+  JsonObject *json = new JsonObject();
+  JsonArray *devices_json = json->AddArray("devices");
+
+  vector<OlaDevice>::const_iterator iter = devices.begin();
+  for (; iter != devices.end(); ++iter) {
+    JsonObject *device_json = devices_json->AppendObject();
+    device_json->Add("alias", iter->Alias());
+    device_json->Add("name", iter->Name());
+    device_json->Add("plugin_id", iter->PluginId());
+    JsonArray *ports_json = device_json->AddArray("ports");
+
+    const vector<OlaInputPort> &input_ports = iter->InputPorts();
+    vector<OlaInputPort>::const_iterator input_iter = input_ports.begin();
+    for (; input_iter != input_ports.end(); ++input_iter) {
+      JsonObject *port_json = ports_json->AppendObject();
+      PortToJson(port_json, *iter, *input_iter, false);
+      AddPortUniverse(port_json, *input_iter);
+    }
+
+    const vector<OlaOutputPort> &output_ports = iter->OutputPorts();
+    vector<OlaOutputPort>::const_iterator output_iter = output_ports.begin();
+    for (; output_iter != output_ports.end(); ++output_iter) {
+      JsonObject *port_json = ports_json->AppendObject();
+      PortToJson(port_json, *iter, *output_iter, true);
+      AddPortUniverse(port_json, *output_iter);
+    }
+  }
+
+  // The main server is running in a separate thread, so fire off the universe
+  // request and let its callback send the response.
+  m_client.FetchUniverseList(
+      NewSingleCallback(this,
+                        &OladHTTPServer::HandleUniversesForOverview,
+                        response,
+                        json));
+}
+
+
+/**
+ * @brief Add the universe list to the patch overview and send it.
+ * @param response the HTTPResponse that is associated with the request.
+ * @param json the overview built so far, which is freed here.
+ * @param result the result of the API call
+ * @param universes the universes
+ */
+void OladHTTPServer::HandleUniversesForOverview(
+    HTTPResponse *response,
+    JsonObject *json,
+    const client::Result &result,
+    const vector<OlaUniverse> &universes) {
+  // On failure the "universes" key is left out, so clients can tell.
+  if (result.Success()) {
+    JsonArray *universes_json = json->AddArray("universes");
+    vector<OlaUniverse>::const_iterator iter = universes.begin();
+    for (; iter != universes.end(); ++iter) {
+      JsonObject *universe = universes_json->AppendObject();
+      universe->Add("id", iter->Id());
+      universe->Add("name", iter->Name());
+      universe->Add("merge_mode",
+                    (iter->MergeMode() == OlaUniverse::MERGE_HTP ? "HTP"
+                                                                 : "LTP"));
+    }
+  }
+
+  response->SetNoCache();
+  response->SetContentType(HTTPServer::CONTENT_TYPE_PLAIN);
+  response->SendJson(*json);
+  delete json;
+  delete response;
+}
+
+
+/**
+ * @brief Add the universe a port is patched to, or null if it isn't.
+ */
+void OladHTTPServer::AddPortUniverse(JsonObject *json, const OlaPort &port) {
+  if (port.IsActive()) {
+    json->Add("universe", port.Universe());
+  } else {
+    json->Add("universe");
+  }
 }
 
 

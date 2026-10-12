@@ -1,12 +1,20 @@
 import {
   createUniverse,
   fetchFreePorts,
+  fetchPatchOverview,
   fetchUniverseInfo,
   fetchUniverseList,
   modifyUniverse,
   type PriorityMode,
 } from './api';
-import { buildModel, nextFreeUniverse, type Port, type Universe } from './patchModel';
+import {
+  buildModel,
+  buildModelFromOverview,
+  nextFreeUniverse,
+  type PatchModel,
+  type Port,
+  type Universe,
+} from './patchModel';
 
 const REFRESH_MS = 3000; // USB / network devices come and go
 
@@ -15,6 +23,8 @@ class PatchStore {
   ports = $state<Port[]>([]);
   error = $state('');
   loaded = $state(false);
+  /** True when olad has no patch_overview, so some free ports may be missing from the list. */
+  limited = $state(false);
 
   #timer: ReturnType<typeof setInterval> | undefined;
   #busy = false;
@@ -30,12 +40,7 @@ class PatchStore {
     if (this.#busy) return;
     this.#busy = true;
     try {
-      const { universes } = await fetchUniverseList();
-      const [details, free] = await Promise.all([
-        Promise.all(universes.map((u) => fetchUniverseInfo(u.id))),
-        fetchFreePorts(),
-      ]);
-      const m = buildModel(details, free);
+      const m = await this.#readModel();
       this.universes = m.universes;
       this.ports = m.ports;
       this.error = '';
@@ -45,6 +50,21 @@ class PatchStore {
     } finally {
       this.#busy = false;
     }
+  }
+
+  // Prefer the one-request overview (complete port list). Stock olad doesn't have it, so
+  // fall back to composing the patch from the older endpoints; those hide most free ports
+  // of devices like Art-Net/sACN, which `limited` lets the UI say.
+  async #readModel(): Promise<PatchModel> {
+    const overview = await fetchPatchOverview();
+    this.limited = overview === null;
+    if (overview) return buildModelFromOverview(overview);
+    const { universes } = await fetchUniverseList();
+    const [details, free] = await Promise.all([
+      Promise.all(universes.map((u) => fetchUniverseInfo(u.id))),
+      fetchFreePorts(),
+    ]);
+    return buildModel(details, free);
   }
 
   universe(id: number) {

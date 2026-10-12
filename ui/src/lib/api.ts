@@ -66,8 +66,35 @@ export async function fetchUniverseList(): Promise<{
 export const fetchUniverseInfo = (id: number) =>
   getJson<RawUniverseInfo>(`/json/universe_info?id=${id}`);
 
-// Ports not patched to any universe.
+// Ports not patched to any universe. Note olad stops at the first free port of devices
+// that don't allow multi-port patching, so this is not the full port list.
 export const fetchFreePorts = () => getJson<RawPort[]>('/json/get_ports');
+
+export interface OverviewPort extends RawPort {
+  universe: number | null;
+}
+
+export interface PatchOverview {
+  devices: { alias: number; name: string; plugin_id: number; ports: OverviewPort[] }[];
+  universes: { id: number; name: string; merge_mode: 'HTP' | 'LTP' }[];
+}
+
+/**
+ * Every device and port with its universe, in one request. Only OLA Plus builds of olad
+ * have this endpoint; stock olad (e.g. 0.10.x) answers 404, which gives null so callers
+ * can fall back to composing the patch from the older endpoints.
+ */
+export async function fetchPatchOverview(): Promise<PatchOverview | null> {
+  const r = await fetch('/json/patch_overview');
+  if (!r.ok) return null;
+  try {
+    const j = (await r.json()) as Partial<PatchOverview>;
+    // A missing "universes" key means olad couldn't list them: treat as unavailable.
+    return Array.isArray(j.devices) && Array.isArray(j.universes) ? (j as PatchOverview) : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function fetchDmx(universe: number): Promise<number[]> {
   const j = await getJson<{ dmx: number[]; error?: string }>(`/get_dmx?u=${universe}`);

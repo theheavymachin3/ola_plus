@@ -1,6 +1,6 @@
 // Pure patch logic: turns olad's per-universe / unpatched port lists into one flat
 // model the UI can group either way (by universe or by device). No I/O here.
-import type { PriorityMode, RawPort, RawUniverseInfo } from './api';
+import type { PatchOverview, PriorityMode, RawPort, RawUniverseInfo } from './api';
 
 export interface Port {
   id: string; // "<alias>-<I|O>-<n>"
@@ -60,6 +60,18 @@ export function buildModel(details: RawUniverseInfo[], free: RawPort[]): PatchMo
   for (const r of free) if (!ports.has(r.id)) ports.set(r.id, toPort(r, null));
   universes.sort((a, b) => a.id - b.id);
   return { universes, ports: [...ports.values()].sort(comparePorts) };
+}
+
+/** Same model as buildModel, from the single /json/patch_overview response. */
+export function buildModelFromOverview(o: PatchOverview): PatchModel {
+  const ports: Port[] = [];
+  for (const d of o.devices) {
+    for (const raw of d.ports) ports.push(toPort(raw, raw.universe ?? null));
+  }
+  const universes = o.universes
+    .map((u) => ({ id: u.id, name: u.name, mergeMode: u.merge_mode }))
+    .sort((a, b) => a.id - b.id);
+  return { universes, ports: ports.sort(comparePorts) };
 }
 
 function portNumber(id: string): number {
