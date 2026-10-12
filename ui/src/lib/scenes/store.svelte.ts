@@ -1,29 +1,28 @@
 import { newId } from '../id';
+import { mergeById } from '../sync/merge';
+import { RemoteDoc } from '../sync/remoteDoc.svelte';
 import { clampFade, type Scene } from './model';
 
-// Saved in the browser for now (per device), like fixtures. The shape is what will move
-// into olad-side storage so every phone/tablet/PC sees the same scenes.
-const KEY = 'olaplus.scenes';
-
-function load(): Scene[] {
-  try {
-    const raw = localStorage.getItem(KEY);
-    const parsed = raw ? (JSON.parse(raw) as Scene[]) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
+// Shared through olad's UI store (every device sees the same scenes); the localStorage copy
+// under the same key as before means scenes recorded before sharing existed are published
+// the first time an OLA Plus olad is reached.
 class SceneStore {
-  scenes = $state<Scene[]>(load());
+  readonly doc = new RemoteDoc<Scene[]>('scenes', 'olaplus.scenes', [], (v) => v.length === 0, mergeById);
+
+  get scenes(): Scene[] {
+    return Array.isArray(this.doc.data) ? this.doc.data : [];
+  }
+
+  start() {
+    this.doc.start();
+  }
 
   inUniverse(universe: number): Scene[] {
     return this.scenes.filter((s) => s.universe === universe);
   }
 
   countIn(universe: number): number {
-    return this.scenes.filter((s) => s.universe === universe).length;
+    return this.inUniverse(universe).length;
   }
 
   nextName(universe: number): string {
@@ -32,29 +31,18 @@ class SceneStore {
 
   add(scene: Omit<Scene, 'id'>): Scene {
     const created: Scene = { ...scene, id: newId(), fade: clampFade(scene.fade) };
-    this.scenes = [...this.scenes, created];
-    this.#save();
+    this.doc.set([...this.scenes, created]);
     return created;
   }
 
   update(id: string, changes: Partial<Omit<Scene, 'id'>>) {
-    this.scenes = this.scenes.map((s) =>
-      s.id === id ? { ...s, ...changes, fade: clampFade(changes.fade ?? s.fade) } : s,
+    this.doc.set(
+      this.scenes.map((s) => (s.id === id ? { ...s, ...changes, fade: clampFade(changes.fade ?? s.fade) } : s)),
     );
-    this.#save();
   }
 
   remove(id: string) {
-    this.scenes = this.scenes.filter((s) => s.id !== id);
-    this.#save();
-  }
-
-  #save() {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(this.scenes));
-    } catch {
-      /* private mode / quota: keep working in memory */
-    }
+    this.doc.set(this.scenes.filter((s) => s.id !== id));
   }
 }
 

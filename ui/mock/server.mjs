@@ -38,6 +38,8 @@ const buf = (u) => dmx.get(u) ?? dmx.set(u, new Array(512).fill(0)).get(u);
 const portsOn = (u, out) => [...ports.values()].filter((p) => p.universe === u && p.is_output === out);
 const universeIds = () => [...new Set([...ports.values()].map((p) => p.universe).filter((u) => u !== null))].sort((a, b) => a - b);
 
+const uiDocs = new Map(); // key -> { rev, data: JSON text }
+
 // --- plugins ---------------------------------------------------------------
 const plugins = [
   [1, 'Dummy', 'Dummy device for testing.'],
@@ -140,6 +142,33 @@ http
         devices: [...devices.values()],
         universes: universeIds().map((id) => ({ id, name: meta.get(id)?.name ?? '', merge_mode: meta.get(id)?.merge ?? 'LTP' })),
       });
+    }
+    // UI document store, like olad's /json/ui_store and /ui_store (absent on stock olad).
+    if (!STOCK && path === '/json/ui_store') {
+      const k = q.get('k') ?? '';
+      if (!/^[a-z0-9_-]{1,32}$/.test(k)) return send(res, { ok: false, error: 'Invalid key' }, 400);
+      const doc = uiDocs.get(k);
+      return send(res, { rev: doc?.rev ?? 0, data: doc ? JSON.parse(doc.data) : null });
+    }
+    if (!STOCK && path === '/ui_store' && req.method === 'POST') {
+      const f = await readForm(req);
+      const k = f.get('k') ?? '';
+      const rev = Number(f.get('rev'));
+      const d = f.get('d') ?? '';
+      if (!Number.isInteger(rev) || rev < 0) return send(res, { ok: false, error: 'rev must be a number' }, 400);
+      if (!/^[a-z0-9_-]{1,32}$/.test(k)) return send(res, { ok: false, error: 'Invalid key' }, 400);
+      if (d.length > 1024 * 1024) return send(res, { ok: false, error: 'Document too large' }, 413);
+      try {
+        JSON.parse(d);
+      } catch {
+        return send(res, { ok: false, error: 'd is not valid JSON' }, 400);
+      }
+      const cur = uiDocs.get(k) ?? { rev: 0, data: 'null' };
+      if (cur.rev !== rev) {
+        return send(res, { ok: false, conflict: true, rev: cur.rev, data: JSON.parse(cur.data) }, 409);
+      }
+      uiDocs.set(k, { rev: rev + 1, data: d });
+      return send(res, { ok: true, rev: rev + 1 });
     }
     if (path === '/json/plugin_info') {
       const p = plugins.find((x) => x.id === Number(q.get('id')));

@@ -8,11 +8,13 @@ import {
   fetchDmx,
   fetchFreePorts,
   fetchPatchOverview,
+  fetchUiDoc,
   fetchPluginInfo,
   fetchUniverseInfo,
   fetchUniverseList,
   modifyUniverse,
   reloadPlugins,
+  saveUiDoc,
   sendDmx,
   type RawPort,
 } from './api';
@@ -125,6 +127,35 @@ describe.skipIf(!base)('UI api client against a real olad', () => {
     expect(typeof info.description).toBe('string');
     expect(typeof info.enabled).toBe('boolean');
     expect(Array.isArray(info.conflicts_with)).toBe(true);
+  });
+
+  it('keeps shared UI documents with revisions (OLA Plus ui_store)', async () => {
+    const key = 'ci-doc';
+    const start = await fetchUiDoc(key);
+    expect(start, 'olad built from this tree must serve /json/ui_store').not.toBeNull();
+    const base = start!.rev; // a re-run on a persistent config dir starts above 0
+
+    const saved = await saveUiDoc(key, base, [{ id: 'a', name: 'first' }]);
+    expect(saved).toEqual({ ok: true, rev: base + 1 });
+    expect(await fetchUiDoc(key)).toEqual({ rev: base + 1, data: [{ id: 'a', name: 'first' }] });
+
+    // A writer that still holds the old revision is refused and gets the current version.
+    const stale = await saveUiDoc(key, base, [{ id: 'b' }]);
+    expect(stale).toEqual({ ok: false, conflict: true, rev: base + 1, data: [{ id: 'a', name: 'first' }] });
+    expect((await fetchUiDoc(key))?.rev).toBe(base + 1);
+
+    // Moving on from the right revision works.
+    expect(await saveUiDoc(key, base + 1, { second: true })).toEqual({ ok: true, rev: base + 2 });
+  });
+
+  it('rejects bad ui_store input and never lets a key name a path', async () => {
+    const post = (params: Record<string, string>) =>
+      fetch('/ui_store', { method: 'POST', body: new URLSearchParams(params) });
+    expect((await post({ k: 'ci-doc', rev: '0', d: '{nope' })).status).toBe(400);
+    expect((await post({ k: '../escape', rev: '0', d: '[]' })).status).toBe(400);
+    expect((await post({ k: 'ci-doc', rev: 'x', d: '[]' })).status).toBe(400);
+    expect((await fetch('/json/ui_store?k=..%2Fescape')).status).toBe(400);
+    expect((await fetch('/json/ui_store?k=')).status).toBe(400);
   });
 
   it('unpatches the port again', async () => {

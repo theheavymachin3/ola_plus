@@ -22,7 +22,9 @@ ola_server_sources = \
     olad/PluginLoader.h \
     olad/PluginManager.cpp \
     olad/PluginManager.h \
-    olad/RDMHTTPModule.h
+    olad/RDMHTTPModule.h \
+    olad/UiStore.cpp \
+    olad/UiStore.h
 ola_server_additional_libs =
 
 if HAVE_DNSSD
@@ -75,7 +77,8 @@ olad_olad_LDADD = olad/libolaserver.la \
 # TESTS
 ##################################################
 test_programs += \
-    olad/OlaTester
+    olad/OlaTester \
+    olad/UiStoreTester
 
 COMMON_OLAD_TEST_LDADD = $(COMMON_TESTING_LIBS) $(libprotobuf_LIBS) \
                          olad/plugin_api/libolaserverplugininterface.la \
@@ -87,5 +90,11 @@ olad_OlaTester_SOURCES = \
     olad/OlaServerServiceImplTest.cpp
 olad_OlaTester_CXXFLAGS = $(COMMON_TESTING_PROTOBUF_FLAGS)
 olad_OlaTester_LDADD = $(COMMON_OLAD_TEST_LDADD)
+
+olad_UiStoreTester_SOURCES = olad/UiStoreTest.cpp
+olad_UiStoreTester_CXXFLAGS = $(COMMON_TESTING_FLAGS)
+olad_UiStoreTester_LDADD = $(COMMON_TESTING_LIBS) \
+                           olad/libolaserver.la \
+                           common/libolacommon.la
 
 CLEANFILES += olad/ola-output.conf

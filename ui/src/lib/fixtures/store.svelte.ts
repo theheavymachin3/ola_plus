@@ -1,29 +1,9 @@
 import { newId } from '../id';
+import { mergeById } from '../sync/merge';
+import { RemoteDoc } from '../sync/remoteDoc.svelte';
 import { findConflicts, nextFreeAddress, sequentialAddresses } from './addressing';
 import { BUILTIN_PROFILES } from './builtin';
 import { footprintOf, type FixtureInst, type Profile } from './model';
-
-// Persisted in the browser for now; the shape is what will move into olad-side storage
-// so every phone/tablet/PC sees the same rig.
-const PROFILES_KEY = 'olaplus.profiles';
-const FIXTURES_KEY = 'olaplus.fixtures';
-
-function load<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function save(key: string, value: unknown) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    /* private mode / quota: keep working in memory */
-  }
-}
 
 export interface AddRequest {
   profileId: string;
@@ -35,9 +15,20 @@ export interface AddRequest {
   name: string;
 }
 
+// Profiles and fixtures are shared through olad's UI store (every device sees the same rig).
+// The localStorage copies use the keys from before sharing existed, so an existing rig is
+// published the first time an OLA Plus olad is reached.
 class FixtureStore {
-  imported = $state<Profile[]>(load(PROFILES_KEY, []));
-  fixtures = $state<FixtureInst[]>(load(FIXTURES_KEY, []));
+  readonly profileDoc = new RemoteDoc<Profile[]>('profiles', 'olaplus.profiles', [], (v) => v.length === 0, mergeById);
+  readonly fixtureDoc = new RemoteDoc<FixtureInst[]>('fixtures', 'olaplus.fixtures', [], (v) => v.length === 0, mergeById);
+
+  get imported(): Profile[] {
+    return Array.isArray(this.profileDoc.data) ? this.profileDoc.data : [];
+  }
+
+  get fixtures(): FixtureInst[] {
+    return Array.isArray(this.fixtureDoc.data) ? this.fixtureDoc.data : [];
+  }
 
   lookup = (id: string): Profile | undefined =>
     BUILTIN_PROFILES.find((p) => p.id === id) ?? this.imported.find((p) => p.id === id);
@@ -45,19 +36,18 @@ class FixtureStore {
   profiles = $derived([...BUILTIN_PROFILES, ...this.imported]);
   conflicts = $derived(findConflicts(this.fixtures, this.lookup));
 
-  #saveFixtures() {
-    save(FIXTURES_KEY, this.fixtures);
+  start() {
+    this.profileDoc.start();
+    this.fixtureDoc.start();
   }
 
   addProfile(p: Profile) {
-    this.imported = [...this.imported.filter((x) => x.id !== p.id), p];
-    save(PROFILES_KEY, this.imported);
+    this.profileDoc.set([...this.imported.filter((x) => x.id !== p.id), p]);
   }
 
   removeProfile(id: string) {
     if (this.fixtures.some((f) => f.profileId === id)) return false; // still in use
-    this.imported = this.imported.filter((p) => p.id !== id);
-    save(PROFILES_KEY, this.imported);
+    this.profileDoc.set(this.imported.filter((p) => p.id !== id));
     return true;
   }
 
@@ -84,19 +74,16 @@ class FixtureStore {
       universe: r.universe,
       address,
     }));
-    this.fixtures = [...this.fixtures, ...created];
-    this.#saveFixtures();
+    this.fixtureDoc.set([...this.fixtures, ...created]);
     return created.length;
   }
 
   update(id: string, changes: Partial<Omit<FixtureInst, 'id'>>) {
-    this.fixtures = this.fixtures.map((f) => (f.id === id ? { ...f, ...changes } : f));
-    this.#saveFixtures();
+    this.fixtureDoc.set(this.fixtures.map((f) => (f.id === id ? { ...f, ...changes } : f)));
   }
 
   remove(id: string) {
-    this.fixtures = this.fixtures.filter((f) => f.id !== id);
-    this.#saveFixtures();
+    this.fixtureDoc.set(this.fixtures.filter((f) => f.id !== id));
   }
 
   inUniverse(universe: number) {

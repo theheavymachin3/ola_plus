@@ -13,6 +13,7 @@ export default defineConfig({
       '/json': target,
       '/get_dmx': target,
       '/set_dmx': target,
+      '/ui_store': target,
       '/new_universe': target,
       '/modify_universe': target,
       '/set_plugin_state': target,

@@ -163,3 +163,37 @@ export async function createUniverse(id: number, name: string, ports: string[]):
   ) as { ok: boolean; message?: string };
   if (!j.ok) throw new Error(j.message || 'Failed to create universe');
 }
+
+// --- Shared UI documents (fixtures, scenes, ...) kept by OLA Plus builds of olad ---------
+
+export interface UiDoc {
+  rev: number;
+  data: unknown;
+}
+
+/** null when olad has no store (stock olad answers 404). Throws on network/server errors. */
+export async function fetchUiDoc(key: string): Promise<UiDoc | null> {
+  const r = await fetch(`/json/ui_store?k=${encodeURIComponent(key)}`);
+  if (r.status === 404 || r.status === 405) return null;
+  if (!r.ok) throw new Error(`ui_store: ${r.status}`);
+  const j = (await r.json()) as UiDoc;
+  return { rev: j.rev, data: j.data };
+}
+
+export type UiSave =
+  | { ok: true; rev: number }
+  | { ok: false; conflict: true; rev: number; data: unknown };
+
+/** Saves against the revision we last saw; a 409 carries the version that beat us. */
+export async function saveUiDoc(key: string, rev: number, data: unknown): Promise<UiSave> {
+  const r = await fetch('/ui_store', {
+    method: 'POST',
+    body: new URLSearchParams({ k: key, rev: String(rev), d: JSON.stringify(data) }),
+  });
+  if (r.status === 409) {
+    const j = (await r.json()) as { rev: number; data: unknown };
+    return { ok: false, conflict: true, rev: j.rev, data: j.data };
+  }
+  if (!r.ok) throw new Error(`ui_store save: ${r.status}`);
+  return { ok: true, rev: ((await r.json()) as { rev: number }).rev };
+}

@@ -74,8 +74,9 @@ jobs:
         run: make -j"$(nproc)"
       - name: Static hosting unit tests
         run: |
-          make -j"$(nproc)" common/http/StaticFilesTester
+          make -j"$(nproc)" common/http/StaticFilesTester olad/UiStoreTester
           ./common/http/StaticFilesTester
+          ./olad/UiStoreTester
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -105,6 +106,22 @@ jobs:
         env:
           OLA_URL: http://127.0.0.1:9090
         run: npx vitest run src/lib/api.integration.test.ts
+      - name: UI documents survive an olad restart
+        run: |
+          # The integration test above left the ci-doc document at revision 2.
+          pkill -f "olad --config-dir" || true
+          sleep 2
+          ./olad/olad --config-dir "$RUNNER_TEMP/olacfg" --log-level 3 --http-port 9090 \
+            --http-data-dir "$GITHUB_WORKSPACE/olad/www" --ui-dir "$GITHUB_WORKSPACE/ui/dist" \
+            >> "$RUNNER_TEMP/olad.log" 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:9090/json/server_stats >/dev/null && break
+            sleep 1
+          done
+          doc=$(curl -sf "http://127.0.0.1:9090/json/ui_store?k=ci-doc")
+          echo "$doc"
+          echo "$doc" | jq -e '.rev == 2 and .data.second == true'
+          ls "$RUNNER_TEMP/olacfg"
       - name: olad log
         if: always()
         run: cat "$RUNNER_TEMP/olad.log" || true

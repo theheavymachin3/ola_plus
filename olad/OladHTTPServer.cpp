@@ -38,6 +38,7 @@
 #include "olad/OladHTTPServer.h"
 #include "olad/OlaServer.h"
 #include "olad/Preferences.h"
+#include "olad/UiStore.h"
 
 namespace ola {
 
@@ -110,6 +111,8 @@ OladHTTPServer::OladHTTPServer(ExportMap *export_map,
   RegisterHandler("/json/get_ports", &OladHTTPServer::JsonAvailablePorts);
   RegisterHandler("/json/patch_overview",
                   &OladHTTPServer::JsonPatchOverview);
+  RegisterHandler("/json/ui_store", &OladHTTPServer::JsonUiStore);
+  RegisterHandler("/ui_store", &OladHTTPServer::SaveUiStore);
   RegisterHandler("/json/universe_info", &OladHTTPServer::JsonUniverseInfo);
 
   // these are the static files for the old UI
@@ -608,6 +611,118 @@ int OladHTTPServer::JsonPatchOverview(const HTTPRequest *request,
                         &OladHTTPServer::HandleDevicesForOverview,
                         response));
   return MHD_YES;
+}
+
+
+/**
+ * @brief Send a JSON body with a status code.
+ */
+int OladHTTPServer::SendJsonWithStatus(HTTPResponse *response,
+                                       unsigned int status,
+                                       const JsonObject &json) {
+  response->SetStatus(status);
+  response->SetNoCache();
+  response->SetContentType(HTTPServer::CONTENT_TYPE_PLAIN);
+  int r = response->SendJson(json);
+  delete response;
+  return r;
+}
+
+
+/**
+ * @brief Read a document from the UI store.
+ *
+ * The web UI keeps its fixtures, scenes and similar here so that every device
+ * sees the same ones. See UiStore.
+ * @param request the HTTPRequest
+ * @param response the HTTPResponse
+ * @returns MHD_NO or MHD_YES
+ */
+int OladHTTPServer::JsonUiStore(const HTTPRequest *request,
+                                HTTPResponse *response) {
+  if (request->CheckParameterExists(HELP_PARAMETER)) {
+    return ServeUsage(response,
+                      "?k=[key]  returns {rev, data}; rev 0 and data null if "
+                      "the key was never saved");
+  }
+
+  UiStore store(m_ola_server->GetPreferencesFactory()->ConfigLocation());
+  UiStore::Document document;
+  if (!store.Get(request->GetParameter("k"), &document)) {
+    JsonObject error;
+    error.Add("ok", false);
+    error.Add("error", "Invalid key, or the document is unreadable");
+    return SendJsonWithStatus(response, 400, error);
+  }
+
+  JsonObject json;
+  json.Add("rev", document.revision);
+  json.AddRaw("data", document.data.empty() ? "null" : document.data);
+  return SendJsonWithStatus(response, 200, json);
+}
+
+
+/**
+ * @brief Save a document to the UI store.
+ *
+ * POST k=[key], rev=[the revision you last saw], d=[JSON]. A 409 reply carries
+ * the current revision and data so the client can catch up.
+ * @param request the HTTPRequest
+ * @param response the HTTPResponse
+ * @returns MHD_NO or MHD_YES
+ */
+int OladHTTPServer::SaveUiStore(const HTTPRequest *request,
+                                HTTPResponse *response) {
+  if (request->CheckParameterExists(HELP_PARAMETER)) {
+    return ServeUsage(response,
+                      "POST k=[key], rev=[revision you last saw], d=[JSON]");
+  }
+
+  JsonObject json;
+  unsigned int base_revision;
+  if (!StringToInt(request->GetPostParameter("rev"), &base_revision)) {
+    json.Add("ok", false);
+    json.Add("error", "rev must be a number");
+    return SendJsonWithStatus(response, 400, json);
+  }
+
+  UiStore store(m_ola_server->GetPreferencesFactory()->ConfigLocation());
+  const string key = request->GetPostParameter("k");
+  unsigned int new_revision = 0;
+
+  switch (store.Save(key, base_revision, request->GetPostParameter("d"),
+                     &new_revision)) {
+    case UiStore::SAVED:
+      json.Add("ok", true);
+      json.Add("rev", new_revision);
+      return SendJsonWithStatus(response, 200, json);
+    case UiStore::CONFLICT: {
+      UiStore::Document current;
+      store.Get(key, &current);
+      json.Add("ok", false);
+      json.Add("conflict", true);
+      json.Add("rev", current.revision);
+      json.AddRaw("data", current.data.empty() ? "null" : current.data);
+      return SendJsonWithStatus(response, 409, json);
+    }
+    case UiStore::INVALID_KEY:
+      json.Add("error", "Invalid key");
+      break;
+    case UiStore::INVALID_DATA:
+      json.Add("error", "d is not valid JSON");
+      break;
+    case UiStore::TOO_LARGE:
+      json.Add("error", "Document too large");
+      json.Add("ok", false);
+      return SendJsonWithStatus(response, 413, json);
+    case UiStore::WRITE_FAILED:
+    default:
+      json.Add("error", "Could not write the document");
+      json.Add("ok", false);
+      return SendJsonWithStatus(response, 500, json);
+  }
+  json.Add("ok", false);
+  return SendJsonWithStatus(response, 400, json);
 }
 
 

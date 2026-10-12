@@ -5,7 +5,10 @@
   import Patch from './components/Patch.svelte';
   import Plugins from './components/Plugins.svelte';
   import Scenes from './components/Scenes.svelte';
+  import { fixtureStore } from './lib/fixtures/store.svelte';
   import { mixer } from './lib/mixer.svelte';
+  import { sceneStore } from './lib/scenes/store.svelte';
+  import { syncSummary } from './lib/sync/summary.svelte';
 
   type Tab = 'mixer' | 'scenes' | 'patch' | 'fixtures' | 'plugins';
   const TABS: { id: Tab; label: string }[] = [
@@ -22,8 +25,16 @@
     location.hash = tab;
   });
 
+  // Ticks so the "updated from another device" notice can expire.
+  let now = $state(Date.now());
+  const sync = $derived(syncSummary(now));
+
   onMount(() => {
     mixer.start();
+    fixtureStore.start();
+    sceneStore.start();
+    const t = setInterval(() => (now = Date.now()), 1000);
+    return () => clearInterval(t);
   });
 </script>
 
@@ -45,6 +56,7 @@
     {#if tab === 'mixer'}<button onclick={() => mixer.clearAll()}>Clear</button>{/if}
     <button class:alert={mixer.blackout} onclick={() => mixer.toggleBlackout()}>Blackout</button>
   {/if}
+  <span class="sync" data-state={sync.state} title={sync.hint}>{sync.label}</span>
   <span class="dot" class:ok={mixer.online} title={mixer.online ? 'Connected' : 'olad unreachable'}></span>
 </header>
 
@@ -99,6 +111,18 @@
   }
   .spacer {
     flex: 1;
+  }
+  .sync {
+    font-size: 0.75rem;
+    color: var(--dim);
+    white-space: nowrap;
+  }
+  .sync[data-state='synced'] {
+    color: var(--good);
+  }
+  .sync[data-state='offline'],
+  .sync[data-state='conflict'] {
+    color: var(--accent);
   }
   .dot {
     width: 10px;
