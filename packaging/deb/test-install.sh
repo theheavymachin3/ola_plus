@@ -47,7 +47,7 @@ done
 ldd /usr/bin/olad | grep "not found" && fail "olad has unresolved libraries"
 olad --version
 grep -q '^ExecStart=/usr/bin/olad' /usr/lib/systemd/system/olad.service || fail "unit has no ExecStart"
-dpkg -L ola-plus | grep -E 'ola-plus|olad.service|60-ola.rules' | head
+dpkg -L ola-plus | grep -E 'ola-plus|olad.service|60-ola.rules' | sed -n '1,10p'
 
 step "run olad as the olad user with the installed defaults (no --ui-dir)"
 nohup runuser -u olad -- /usr/bin/olad --config-dir /etc/ola --log-level 3 > /tmp/olad.log 2>&1 &
@@ -57,7 +57,9 @@ for _ in $(seq 1 90); do
 done
 curl -sf http://127.0.0.1:9090/json/server_stats > /dev/null || { cat /tmp/olad.log; fail "olad did not come up"; }
 bash "$REPO/ui/ci/smoke-ui-hosting.sh" http://127.0.0.1:9090 || fail "UI hosting checks failed"
-ola_dev_info | head -5
+# (Read it all: with pipefail, `| head` can end the producer early and fail the script.)
+ola_dev_info > /tmp/dev_info.txt
+sed -n '1,8p' /tmp/dev_info.txt
 
 step "shared UI documents are written to the kept config directory"
 curl -sf -X POST -d 'k=deb-test&rev=0&d=[1]' http://127.0.0.1:9090/ui_store | jq -e '.ok == true'
