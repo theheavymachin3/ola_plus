@@ -45,10 +45,14 @@ class OladHTTPServer: public ola::http::OlaHTTPServer {
       ola::http::HTTPServer::HTTPServerOptions {
    public:
     bool enable_quit;
+    // A built web UI (a directory containing index.html) to serve at /ui/.
+    // Empty disables it.
+    std::string ui_dir;
 
     OladHTTPServerOptions()
         : ola::http::HTTPServer::HTTPServerOptions(),
-          enable_quit(true) {
+          enable_quit(true),
+          ui_dir("") {
     }
   };
 

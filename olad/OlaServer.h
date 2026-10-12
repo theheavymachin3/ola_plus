@@ -70,6 +70,8 @@ class OlaServer : public ola::rpc::RpcSessionHandlerInterface {
     unsigned int http_port;  /** @brief Port to run the HTTP server on */
     /** @brief Directory that contains the static content */
     std::string http_data_dir;
+    /** @brief Directory with a built web UI, served at /ui/ (empty: off) */
+    std::string ui_dir;
     std::string network_interface;
     std::string pid_data_dir;  /** @brief Directory with the PID definitions */
   };

@@ -424,6 +424,7 @@ bool OlaServer::StartHttpServer(ola::rpc::RpcServer *server,
   options.data_dir = (m_options.http_data_dir.empty() ? HTTP_DATA_DIR :
                       m_options.http_data_dir);
   options.enable_quit = m_options.http_enable_quit;
+  options.ui_dir = m_options.ui_dir;
 
   auto_ptr<OladHTTPServer> httpd(
       new OladHTTPServer(m_export_map, options,

@@ -56,6 +56,9 @@ DEFINE_s_default_bool(daemon, f, false,
                       "Fork and run as a background process.");
 #endif  // _WIN32
 DEFINE_s_string(http_data_dir, d, "", "The path to the static www content.");
+DEFINE_string(ui_dir, "",
+              "The path to a built OLA Plus web UI (a directory containing "
+              "index.html), served at /ui/.");
 DEFINE_s_string(interface, i, "",
                 "The interface name (e.g. eth0) or IP address of the network "
                 "interface to use for the web server.");
@@ -135,6 +138,7 @@ int main(int argc, char *argv[]) {
   options.http_enable_quit = FLAGS_http_quit;
   options.http_port = FLAGS_http_port;
   options.http_data_dir = FLAGS_http_data_dir.str();
+  options.ui_dir = FLAGS_ui_dir.str();
   options.network_interface = FLAGS_interface.str();
   options.pid_data_dir = FLAGS_pid_location.str();
 

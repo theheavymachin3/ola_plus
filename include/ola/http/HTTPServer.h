@@ -198,6 +198,15 @@ class HTTPServer: public ola::thread::Thread {
   // Set the default handler.
   void RegisterDefaultHandler(BaseHTTPCallback *handler);
 
+  // Serve every file below `directory` for URLs under `url_prefix`, e.g.
+  // ("/ui", "/usr/share/ola-ui"). `directory` is an absolute path on disk and is
+  // independent of the data dir. With `single_page_app`, a missing path without
+  // a file extension returns index.html so client side routing works. See
+  // StaticFiles.h for the URL to file mapping and what is rejected.
+  bool RegisterStaticDirectory(const std::string &url_prefix,
+                               const std::string &directory,
+                               bool single_page_app = true);
+
   void Handlers(std::vector<std::string> *handlers) const;
   const std::string DataDir() const { return m_data_dir; }
 
@@ -264,8 +273,19 @@ class HTTPServer: public ola::thread::Thread {
   unsigned int m_port;
   std::string m_data_dir;
 
+  typedef struct {
+    std::string url_prefix;
+    std::string directory;
+    bool single_page_app;
+  } static_directory;
+  std::vector<static_directory> m_static_dirs;
+
   int ServeStaticContent(static_file_info *file_info,
                          HTTPResponse *response);
+  int ServeStaticDirectory(const static_directory &dir,
+                           const HTTPRequest *request,
+                           HTTPResponse *response,
+                           bool *handled);
 
   void InsertSocket(bool is_readable, bool is_writeable, int fd);
   void FreeSocket(DescriptorState *state);

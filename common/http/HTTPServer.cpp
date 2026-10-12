@@ -27,6 +27,7 @@
 #include <ola/base/Macro.h>
 #include <ola/file/Util.h>
 #include <ola/http/HTTPServer.h>
+#include <ola/http/StaticFiles.h>
 #include <ola/io/Descriptor.h>
 #include <ola/web/Json.h>
 #include <ola/web/JsonWriter.h>
@@ -660,6 +661,15 @@ int HTTPServer::DispatchRequest(const HTTPRequest *request,
     return ServeStaticContent(&(file_iter->second), response);
   }
 
+  vector<static_directory>::const_iterator dir_iter = m_static_dirs.begin();
+  for (; dir_iter != m_static_dirs.end(); ++dir_iter) {
+    bool handled = false;
+    int ret = ServeStaticDirectory(*dir_iter, request, response, &handled);
+    if (handled) {
+      return ret;
+    }
+  }
+
   if (m_default_handler) {
     return m_default_handler->Run(request, response);
   }
@@ -735,6 +745,36 @@ bool HTTPServer::RegisterFile(const std::string &path,
  */
 void HTTPServer::RegisterDefaultHandler(BaseHTTPCallback *handler) {
   m_default_handler = handler;
+}
+
+
+/**
+ * @brief Serve a directory of static files below a URL prefix.
+ * @param url_prefix the URL prefix, e.g. "/ui" (leading slash, none trailing)
+ * @param directory the directory on disk to serve
+ * @param single_page_app fall back to index.html for unknown routes
+ */
+bool HTTPServer::RegisterStaticDirectory(const string &url_prefix,
+                                         const string &directory,
+                                         bool single_page_app) {
+  if (url_prefix.size() < 2 || url_prefix[0] != '/' ||
+      url_prefix[url_prefix.size() - 1] == '/' || directory.empty()) {
+    OLA_WARN << "Invalid static directory: '" << url_prefix << "' -> '"
+             << directory << "'";
+    return false;
+  }
+  vector<static_directory>::const_iterator iter = m_static_dirs.begin();
+  for (; iter != m_static_dirs.end(); ++iter) {
+    if (iter->url_prefix == url_prefix) {
+      return false;
+    }
+  }
+  static_directory dir;
+  dir.url_prefix = url_prefix;
+  dir.directory = directory;
+  dir.single_page_app = single_page_app;
+  m_static_dirs.push_back(dir);
+  return true;
 }
 
 
@@ -858,6 +898,110 @@ int HTTPServer::ServeStaticContent(static_file_info *file_info,
   delete response;
   return ret;
 }
+
+/**
+ * @brief Serve a file from a registered static directory, if the URL is under
+ * its prefix.
+ * @param dir the registered directory
+ * @param request the request
+ * @param response the response to use
+ * @param[out] handled true if the URL belonged to this directory, in which
+ *   case the response has been consumed.
+ */
+int HTTPServer::ServeStaticDirectory(const static_directory &dir,
+                                     const HTTPRequest *request,
+                                     HTTPResponse *response,
+                                     bool *handled) {
+  // The largest file we are willing to read into memory in one go.
+  static const std::streamoff MAX_STATIC_FILE_SIZE = 64 * 1024 * 1024;
+
+  string relative;
+  switch (ResolveStaticUrl(dir.url_prefix, request->Url(), &relative)) {
+    case STATIC_URL_NOT_MATCHED:
+      *handled = false;
+      return MHD_NO;
+    case STATIC_URL_REDIRECT:
+      // Relative asset URLs only resolve correctly with the trailing slash.
+      *handled = true;
+      return ServeRedirect(response, dir.url_prefix + "/");
+    case STATIC_URL_REJECTED:
+      OLA_WARN << "Rejected unsafe static URL: " << request->Url();
+      *handled = true;
+      return ServeNotFound(response);
+    case STATIC_URL_OK:
+      break;
+  }
+  *handled = true;
+
+  if (request->Method() != "GET" && request->Method() != "HEAD") {
+    return ServeNotFound(response);
+  }
+
+  // Try the file itself first, then (for client side routes) index.html.
+  const bool may_fall_back = dir.single_page_app &&
+                             IsSinglePageRoute(relative);
+  for (int attempt = 0; attempt < 2; attempt++) {
+    if (attempt == 1) {
+      if (!may_fall_back) {
+        break;
+      }
+      relative = "index.html";
+    }
+
+    string file_path = dir.directory;
+    file_path.push_back(ola::file::PATH_SEPARATOR);
+    string::size_type start = file_path.size();
+    file_path.append(relative);
+    // Url separators are '/', the file system's may not be.
+    for (string::size_type i = start; i < file_path.size(); i++) {
+      if (file_path[i] == '/') {
+        file_path[i] = ola::file::PATH_SEPARATOR;
+      }
+    }
+
+    ifstream i_stream(file_path.c_str(), ifstream::binary);
+    if (!i_stream.is_open()) {
+      continue;
+    }
+    i_stream.seekg(0, std::ios::end);
+    const std::streamoff length = i_stream.tellg();
+    // A directory opens fine on some platforms but has no usable size.
+    if (length < 0 || length > MAX_STATIC_FILE_SIZE) {
+      continue;
+    }
+    i_stream.seekg(0, std::ios::beg);
+
+    char *data = static_cast<char*>(malloc(length ? length : 1));
+    if (!data) {
+      return ServeError(response, "Out of memory");
+    }
+    i_stream.read(data, length);
+    if (i_stream.gcount() != length) {
+      free(data);
+      continue;
+    }
+    i_stream.close();
+
+    struct MHD_Response *mhd_response = BuildResponse(
+        static_cast<void*>(data), static_cast<size_t>(length));
+    const string content_type = ContentTypeForPath(relative);
+    MHD_add_response_header(mhd_response, MHD_HTTP_HEADER_CONTENT_TYPE,
+                            content_type.c_str());
+    // index.html names the hashed assets, so it must never be served stale.
+    if (relative == "index.html") {
+      MHD_add_response_header(mhd_response, MHD_HTTP_HEADER_CACHE_CONTROL,
+                              "no-cache");
+    }
+    int ret = MHD_queue_response(response->Connection(), MHD_HTTP_OK,
+                                 mhd_response);
+    MHD_destroy_response(mhd_response);
+    delete response;
+    return ret;
+  }
+
+  return ServeNotFound(response);
+}
+
 
 void HTTPServer::InsertSocket(bool is_readable, bool is_writeable, int fd) {
 #ifdef _WIN32

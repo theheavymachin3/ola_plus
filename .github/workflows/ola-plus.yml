@@ -1,8 +1,9 @@
 name: ola-plus
 
-# Lean pipeline for the fork: checks the new web UI, builds olad from this tree, starts it
-# and runs the UI's API client against the real daemon. (The upstream "build" workflow does
-# full distcheck/coverage runs and is much slower.)
+# Lean pipeline for the fork: checks the new web UI, builds olad from this tree, runs the
+# static-hosting unit tests, starts olad serving the built UI and exercises both the UI's
+# API client and the /ui/ hosting against the real daemon. (The upstream "build" workflow
+# does full distcheck/coverage runs and is much slower.)
 on:
   push:
     branches: [master]
@@ -10,12 +11,14 @@ on:
       - 'ui/**'
       - 'olad/**'
       - 'common/http/**'
+      - 'include/ola/http/**'
       - '.github/workflows/ola-plus.yml'
   pull_request:
     paths:
       - 'ui/**'
       - 'olad/**'
       - 'common/http/**'
+      - 'include/ola/http/**'
   workflow_dispatch:
 
 permissions:
@@ -44,7 +47,7 @@ jobs:
           path: ui/dist
 
   olad:
-    name: olad + UI API contract
+    name: olad + UI hosting + API contract
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -66,31 +69,41 @@ jobs:
       - name: Configure
         run: |
           autoreconf -i
-          ./configure CC="ccache gcc" CXX="ccache g++" CPPFLAGS=-Wno-deprecated-declarations
+          ./configure --enable-unittests CC="ccache gcc" CXX="ccache g++" CPPFLAGS=-Wno-deprecated-declarations
       - name: Build olad
         run: make -j"$(nproc)"
-      - name: Start olad
+      - name: Static hosting unit tests
+        run: |
+          make -j"$(nproc)" common/http/StaticFilesTester
+          ./common/http/StaticFilesTester
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Build the web UI
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build
+      - name: Start olad serving the UI
         run: |
           mkdir -p "$RUNNER_TEMP/olacfg"
           ./olad/olad --config-dir "$RUNNER_TEMP/olacfg" --log-level 3 --http-port 9090 \
+            --ui-dir "$GITHUB_WORKSPACE/ui/dist" \
             > "$RUNNER_TEMP/olad.log" 2>&1 &
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:9090/json/server_stats && exit 0
             sleep 1
           done
           echo "olad did not come up"; cat "$RUNNER_TEMP/olad.log"; exit 1
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: ui/package-lock.json
+      - name: UI hosting at /ui/
+        run: bash ui/ci/smoke-ui-hosting.sh http://127.0.0.1:9090
       - name: UI API client vs real olad
         working-directory: ui
         env:
           OLA_URL: http://127.0.0.1:9090
-        run: |
-          npm ci
-          npx vitest run src/lib/api.integration.test.ts
+        run: npx vitest run src/lib/api.integration.test.ts
       - name: olad log
         if: always()
         run: cat "$RUNNER_TEMP/olad.log" || true

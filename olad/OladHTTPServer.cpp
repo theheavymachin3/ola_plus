@@ -87,6 +87,11 @@ OladHTTPServer::OladHTTPServer(ExportMap *export_map,
       m_enable_quit(options.enable_quit),
       m_interface(iface),
       m_rdm_module(&m_server, &m_client) {
+  if (!options.ui_dir.empty()) {
+    // The OLA Plus single page UI, served from its build output directory.
+    m_server.RegisterStaticDirectory("/ui", options.ui_dir);
+  }
+
   // The main handlers
   RegisterHandler("/quit", &OladHTTPServer::DisplayQuit);
   RegisterHandler("/reload", &OladHTTPServer::ReloadPlugins);
