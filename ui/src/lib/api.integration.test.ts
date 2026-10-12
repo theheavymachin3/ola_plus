@@ -87,7 +87,11 @@ describe.skipIf(!base)('UI api client against a real olad', () => {
     expect(['HTP', 'LTP']).toContain(u?.merge_mode);
     // It is a superset of get_ports, which hides ports beyond the first per device.
     const listed = new Set(all.map((p) => p.id));
-    for (const f of await fetchFreePorts()) expect(listed.has(f.id)).toBe(true);
+    const free = await fetchFreePorts();
+    for (const f of free) expect(listed.has(f.id)).toBe(true);
+    const freeIds = new Set(free.map((f) => f.id));
+    const hidden = all.filter((p) => p.universe === null && !freeIds.has(p.id)).length;
+    console.log(`patch_overview shows ${hidden} free ports that get_ports hides`);
     // And the model built from it agrees with the per-universe one.
     const m = buildModelFromOverview(overview!);
     expect(m.ports.find((p) => p.id === port.id)?.universe).toBe(UNIVERSE);

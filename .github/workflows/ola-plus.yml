@@ -108,3 +108,55 @@ jobs:
       - name: olad log
         if: always()
         run: cat "$RUNNER_TEMP/olad.log" || true
+
+  # Manual only: a 32-bit ARM (Raspberry Pi OS / Debian trixie) build of olad plus the UI,
+  # to try on real hardware. Cross-compiled in a trixie container so library versions match
+  # the Pi. The host-side ola_protoc_plugin is built natively and reused (OLA's own
+  # cross-compile mechanism).
+  olad-armhf:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    timeout-minutes: 120
+    steps:
+      - name: Install git
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install toolchains and libraries
+        run: |
+          dpkg --add-architecture armhf
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential crossbuild-essential-armhf autoconf automake libtool pkgconf bison flex ccache \
+            protobuf-compiler libprotobuf-dev libprotoc-dev uuid-dev libmicrohttpd-dev libcppunit-dev \
+            libprotobuf-dev:armhf uuid-dev:armhf libmicrohttpd-dev:armhf libcppunit-dev:armhf \
+            libncurses-dev:armhf zlib1g-dev:armhf libusb-1.0-0-dev:armhf libftdi-dev:armhf \
+            liblo-dev:armhf libavahi-client-dev:armhf
+      - name: autoreconf
+        run: autoreconf -i
+      - name: Build the host ola_protoc_plugin
+        run: |
+          mkdir build-host && cd build-host
+          ../configure CPPFLAGS=-Wno-deprecated-declarations
+          make -j"$(nproc)" protoc/ola_protoc_plugin
+      - name: Cross-configure for armhf
+        run: |
+          mkdir build-arm && cd build-arm
+          export PKG_CONFIG_LIBDIR=/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig
+          ../configure --host=arm-linux-gnueabihf \
+            --with-ola-protoc-plugin="$GITHUB_WORKSPACE/build-host/protoc/ola_protoc_plugin" \
+            CPPFLAGS=-Wno-deprecated-declarations
+      - name: Cross-build and stage
+        run: |
+          cd build-arm
+          make -j"$(nproc)"
+          make install DESTDIR="$GITHUB_WORKSPACE/stage"
+          cd "$GITHUB_WORKSPACE"
+          tar -C stage -czf ola-plus-armhf.tar.gz .
+          file stage/usr/local/bin/olad || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ola-plus-armhf
+          path: ola-plus-armhf.tar.gz
