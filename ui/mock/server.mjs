@@ -38,6 +38,7 @@ const buf = (u) => dmx.get(u) ?? dmx.set(u, new Array(512).fill(0)).get(u);
 const portsOn = (u, out) => [...ports.values()].filter((p) => p.universe === u && p.is_output === out);
 const universeIds = () => [...new Set([...ports.values()].map((p) => p.universe).filter((u) => u !== null))].sort((a, b) => a - b);
 
+const startedAt = new Date().toString().slice(0, 24);
 const uiDocs = new Map(); // key -> { rev, data: JSON text }
 
 // --- plugins ---------------------------------------------------------------
@@ -102,6 +103,13 @@ http
     const path = url.pathname;
     const q = url.searchParams;
 
+    if (path === '/json/server_stats') {
+      return send(res, {
+        hostname: 'mock-olad', instance_name: 'OLA Server', config_dir: '/etc/ola', ip: '127.0.0.1',
+        broadcast: '127.255.255.255', subnet: '255.0.0.0', hw_address: '00:00:00:00:00:00',
+        version: '0.10.9', build: 'mock', up_since: startedAt, quit_enabled: false,
+      });
+    }
     if (path === '/json/universe_plugin_list') {
       return send(res, {
         plugins: plugins.map(({ id, name, active, enabled }) => ({ id, name, active, enabled })),

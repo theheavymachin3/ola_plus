@@ -6,6 +6,8 @@ It talks to `olad` over the HTTP API `olad` already exposes.
 
 | Tab | What it does |
 | --- | --- |
+| Overview | The landing page: server and rig at a glance, a live activity strip per universe with its inputs and outputs, every device and how many of its ports are patched, and a short list of things that need attention (overlapping fixtures, a universe nothing listens to, plugins that are enabled but not running, storage not shared). |
+| Monitor | The 512 channels of the selected universe as a live grid (about 5 updates a second), as 0–255, % or hex. Changed channels flash, coloured edges mark fixtures, tap a channel (or use the arrow keys) to see which fixture and channel it is. Shows what olad outputs, whoever is sending. |
 | Mixer | Faders per channel or per fixture, master, blackout. Works with mouse, touch and keyboard. |
 | Groups | In the Mixer tab: a master fader (0–100%) for a set of fixtures and/or channels, e.g. "Front wash". Scales only the output, so the levels underneath are untouched. |
 | Scenes | Record the lit channels as a scene. Tap to fade to it (per-scene fade time), hold **Bump** to flash it over the mix. A scene is a *look* (replaces everything) or an *accent* (only its own channels). |

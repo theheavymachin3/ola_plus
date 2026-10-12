@@ -197,3 +197,21 @@ export async function saveUiDoc(key: string, rev: number, data: unknown): Promis
   if (!r.ok) throw new Error(`ui_store save: ${r.status}`);
   return { ok: true, rev: ((await r.json()) as { rev: number }).rev };
 }
+
+// --- Server info ---------------------------------------------------------------------------
+
+export interface ServerStats {
+  hostname: string;
+  instance_name: string;
+  config_dir: string;
+  ip: string;
+  broadcast: string;
+  subnet: string;
+  hw_address: string;
+  version: string;
+  build: string;
+  up_since: string; // already formatted by olad ("Mon Oct 12 21:58:22 2026")
+  quit_enabled: boolean;
+}
+
+export const fetchServerStats = () => getJson<ServerStats>('/json/server_stats');

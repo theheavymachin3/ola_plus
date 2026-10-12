@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Mixer from './components/Mixer.svelte';
+  import Monitor from './components/Monitor.svelte';
+  import Overview from './components/Overview.svelte';
   import Fixtures from './components/Fixtures.svelte';
   import Patch from './components/Patch.svelte';
   import Plugins from './components/Plugins.svelte';
@@ -11,9 +13,11 @@
   import { sceneStore } from './lib/scenes/store.svelte';
   import { syncSummary } from './lib/sync/summary.svelte';
 
-  type Tab = 'mixer' | 'scenes' | 'patch' | 'fixtures' | 'plugins';
+  type Tab = 'overview' | 'mixer' | 'monitor' | 'scenes' | 'patch' | 'fixtures' | 'plugins';
   const TABS: { id: Tab; label: string }[] = [
+    { id: 'overview', label: 'Overview' },
     { id: 'mixer', label: 'Mixer' },
+    { id: 'monitor', label: 'Monitor' },
     { id: 'scenes', label: 'Scenes' },
     { id: 'patch', label: 'Patch' },
     { id: 'fixtures', label: 'Fixtures' },
@@ -21,7 +25,7 @@
   ];
 
   const fromHash = location.hash.slice(1) as Tab;
-  let tab = $state<Tab>(TABS.some((t) => t.id === fromHash) ? fromHash : 'mixer');
+  let tab = $state<Tab>(TABS.some((t) => t.id === fromHash) ? fromHash : 'overview');
   $effect(() => {
     location.hash = tab;
   });
@@ -48,7 +52,7 @@
     {/each}
   </div>
   <span class="spacer"></span>
-  {#if tab === 'mixer' || tab === 'scenes'}
+  {#if tab === 'mixer' || tab === 'scenes' || tab === 'monitor'}
     <select value={mixer.universe} onchange={(e) => mixer.selectUniverse(Number(e.currentTarget.value))}>
       {#each mixer.universes as u (u.id)}
         <option value={u.id}>U{u.id}{u.name ? ` · ${u.name}` : ''}</option>
@@ -56,14 +60,18 @@
       {#if !mixer.universes.length}<option value={mixer.universe}>U{mixer.universe}</option>{/if}
     </select>
     {#if tab === 'mixer'}<button onclick={() => mixer.clearAll()}>Clear</button>{/if}
-    <button class:alert={mixer.blackout} onclick={() => mixer.toggleBlackout()}>Blackout</button>
+    {#if tab !== 'monitor'}<button class:alert={mixer.blackout} onclick={() => mixer.toggleBlackout()}>Blackout</button>{/if}
   {/if}
   <span class="sync" data-state={sync.state} title={sync.hint}>{sync.label}</span>
   <span class="dot" class:ok={mixer.online} title={mixer.online ? 'Connected' : 'olad unreachable'}></span>
 </header>
 
-{#if tab === 'mixer'}
+{#if tab === 'overview'}
+  <Overview onnavigate={(t) => (tab = t)} />
+{:else if tab === 'mixer'}
   <Mixer />
+{:else if tab === 'monitor'}
+  <Monitor />
 {:else if tab === 'scenes'}
   <Scenes />
 {:else if tab === 'patch'}
