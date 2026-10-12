@@ -132,7 +132,7 @@ jobs:
             build-essential crossbuild-essential-armhf autoconf automake libtool pkgconf bison flex ccache \
             protobuf-compiler libprotobuf-dev libprotoc-dev uuid-dev libmicrohttpd-dev libcppunit-dev \
             libprotobuf-dev:armhf uuid-dev:armhf libmicrohttpd-dev:armhf libcppunit-dev:armhf \
-            libncurses-dev:armhf zlib1g-dev:armhf libusb-1.0-0-dev:armhf libftdi-dev:armhf \
+            libncurses-dev:armhf zlib1g-dev:armhf libusb-1.0-0-dev:armhf libftdi1-dev:armhf \
             liblo-dev:armhf libavahi-client-dev:armhf
       - name: autoreconf
         run: autoreconf -i
