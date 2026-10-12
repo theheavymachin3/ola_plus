@@ -187,7 +187,9 @@ jobs:
         run: |
           # The workspace is owned by the runner user, not the container's root.
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          VERSION="0.10.9+plus$(date -u +%Y%m%d)+g$(git rev-parse --short HEAD)"
+          # Date AND time: the version must grow with every build or apt calls a same-day rebuild a
+          # downgrade (it would otherwise be decided by the git hash).
+          VERSION="0.10.9+plus$(date -u +%Y%m%d%H%M%S)+g$(git rev-parse --short HEAD)"
           bash packaging/deb/build-deb.sh stage ui-dist "$VERSION" armhf out arm-linux-gnueabihf-strip
           ls -l out
       - uses: actions/upload-artifact@v4
