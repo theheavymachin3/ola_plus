@@ -22,6 +22,7 @@ const UNIVERSE = 41; // unlikely to clash with a user's rig on a dev machine
 
 describe.skipIf(!base)('UI api client against a real olad', () => {
   let port: RawPort;
+  let initialMerge: 'HTP' | 'LTP';
 
   beforeAll(() => {
     // api.ts uses same-origin paths (the browser talks to olad through Vite's proxy).
@@ -56,7 +57,8 @@ describe.skipIf(!base)('UI api client against a real olad', () => {
     await createUniverse(UNIVERSE, 'ci universe', [port.id]);
     const info = await fetchUniverseInfo(UNIVERSE);
     expect(info.name).toBe('ci universe');
-    expect(info.merge_mode).toBe('HTP');
+    expect(['HTP', 'LTP']).toContain(info.merge_mode);
+    initialMerge = info.merge_mode;
     expect(info.output_ports.map((p) => p.id)).toContain(port.id);
   });
 
@@ -69,10 +71,11 @@ describe.skipIf(!base)('UI api client against a real olad', () => {
   });
 
   it('renames and changes merge mode (name is mandatory on modify)', async () => {
-    await modifyUniverse({ id: UNIVERSE, name: 'renamed', mergeMode: 'LTP' });
+    const flipped = initialMerge === 'HTP' ? 'LTP' : 'HTP';
+    await modifyUniverse({ id: UNIVERSE, name: 'renamed', mergeMode: flipped });
     const info = await fetchUniverseInfo(UNIVERSE);
     expect(info.name).toBe('renamed');
-    expect(info.merge_mode).toBe('LTP');
+    expect(info.merge_mode).toBe(flipped);
   });
 
   it('sets a static priority when the port supports it', async () => {

@@ -138,7 +138,7 @@ http
       const f = await readForm(req);
       const id = Number(f.get('id'));
       const before = ids(f.get('add_ports')).length;
-      meta.set(id, { name: f.get('name') || '', merge: 'HTP' });
+      meta.set(id, { name: f.get('name') || '', merge: 'LTP' }); // olad's default
       applyModify(id, new URLSearchParams({ add_ports: f.get('add_ports') ?? '' }));
       const ok = before === 0 || portsOn(id, true).length + portsOn(id, false).length > 0;
       return send(res, { ok, universe: id, message: ok ? '' : 'Failed to patch any ports' });
