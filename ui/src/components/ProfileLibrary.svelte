@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { newId } from '../lib/id';
   import { parseOfl } from '../lib/fixtures/ofl';
   import { fetchProfile, listFixtures, listManufacturers, type Manufacturer } from '../lib/fixtures/oflRemote';
   import { profileLabel } from '../lib/fixtures/model';
@@ -72,7 +73,7 @@
 
   function importPasted() {
     try {
-      const { profile, skippedModes } = parseOfl(JSON.parse(pasted), pastedMan.trim(), `custom:${pastedMan.trim()}/${crypto.randomUUID().slice(0, 8)}`);
+      const { profile, skippedModes } = parseOfl(JSON.parse(pasted), pastedMan.trim(), `custom:${pastedMan.trim()}/${newId().slice(0, 8)}`);
       store.addProfile({ ...profile, source: 'custom' });
       pasted = '';
       report(`Imported ${profileLabel(profile)}.` + (skippedModes.length ? ` Skipped matrix modes: ${skippedModes.join(', ')}.` : ''));

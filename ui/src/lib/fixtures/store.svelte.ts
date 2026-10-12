@@ -1,3 +1,4 @@
+import { newId } from '../id';
 import { findConflicts, nextFreeAddress, sequentialAddresses } from './addressing';
 import { BUILTIN_PROFILES } from './builtin';
 import { footprintOf, type FixtureInst, type Profile } from './model';
@@ -76,7 +77,7 @@ class FixtureStore {
     const base = r.name.trim() || this.lookup(r.profileId)?.name || 'Fixture';
     let n = this.#nextNumber(base);
     const created = addresses.map<FixtureInst>((address) => ({
-      id: crypto.randomUUID(),
+      id: newId(),
       name: r.count === 1 && !this.#nameTaken(base) ? base : `${base} ${n++}`,
       profileId: r.profileId,
       mode: r.mode,

@@ -1,12 +1,13 @@
 import { fetchDmx, fetchUniverseList, sendDmx, type UniverseSummary } from './api';
+import { composeOutput, SLOTS } from './scenes/model';
 
-const SLOTS = 512;
 const SEND_INTERVAL_MS = 40; // ~25 fps max towards olad
 const POLL_INTERVAL_MS = 750;
 const IDLE_BEFORE_POLL_MS = 1200;
 
-// Levels are what the operator set (0-255); output = level * master, or 0 on blackout.
-// Keeping them separate means master/blackout never destroy the underlying look.
+// Levels are what the operator set (0-255); output = level * master, or 0 on blackout, with
+// a held bump on top. Keeping them separate means master/blackout/bumps never destroy the
+// underlying look.
 class Mixer {
   universes = $state<UniverseSummary[]>([]);
   universe = $state(1);
@@ -14,13 +15,19 @@ class Mixer {
   master = $state(100); // percent
   blackout = $state(false);
   online = $state(false);
+  /** Counts hand edits of channel levels, so a running fade can tell the operator took over. */
+  editSeq = $state(0);
 
   #dirty = false;
   #lastEdit = 0;
+  #bump: ReadonlyMap<number, number> | null = null;
 
   output(): number[] {
-    const k = this.blackout ? 0 : this.master / 100;
-    return this.levels.map((v) => Math.round(v * k));
+    return composeOutput(this.levels, this.master, this.blackout, this.#bump);
+  }
+
+  get bumping() {
+    return this.#bump !== null;
   }
 
   async start() {
@@ -55,6 +62,22 @@ class Mixer {
 
   setLevel(ch: number, value: number) {
     this.levels[ch] = Math.max(0, Math.min(255, Math.round(value)));
+    this.editSeq++;
+    this.touch();
+  }
+
+  /** Replace levels in bulk (scene playback). Not a hand edit, so editSeq is untouched. */
+  applyLevels(next: ArrayLike<number>) {
+    for (let i = 0; i < SLOTS; i++) {
+      const v = next[i] ?? 0;
+      if (this.levels[i] !== v) this.levels[i] = v;
+    }
+    this.touch();
+  }
+
+  /** Hold a set of channels at the given values on top of the mix (null releases). */
+  setBump(bump: ReadonlyMap<number, number> | null) {
+    this.#bump = bump;
     this.touch();
   }
 
@@ -70,6 +93,7 @@ class Mixer {
 
   clearAll() {
     this.levels = new Array(SLOTS).fill(0);
+    this.editSeq++;
     this.touch();
   }
 
@@ -89,11 +113,11 @@ class Mixer {
     }
   }
 
-  // Adopt changes made by other clients, but only while this one is idle and the
-  // output isn't being scaled (otherwise we'd read back scaled values as levels).
+  // Adopt changes made by other clients, but only while this one is idle and the output
+  // isn't being altered (scaled or bumped), otherwise we'd read that back as levels.
   async #poll() {
     if (this.#dirty || Date.now() - this.#lastEdit < IDLE_BEFORE_POLL_MS) return;
-    if (this.master !== 100 || this.blackout) return;
+    if (this.master !== 100 || this.blackout || this.#bump) return;
     try {
       const d = await fetchDmx(this.universe);
       for (let i = 0; i < SLOTS; i++) {

@@ -4,17 +4,20 @@
   import Fixtures from './components/Fixtures.svelte';
   import Patch from './components/Patch.svelte';
   import Plugins from './components/Plugins.svelte';
+  import Scenes from './components/Scenes.svelte';
   import { mixer } from './lib/mixer.svelte';
 
-  type Tab = 'mixer' | 'patch' | 'fixtures' | 'plugins';
+  type Tab = 'mixer' | 'scenes' | 'patch' | 'fixtures' | 'plugins';
   const TABS: { id: Tab; label: string }[] = [
     { id: 'mixer', label: 'Mixer' },
+    { id: 'scenes', label: 'Scenes' },
     { id: 'patch', label: 'Patch' },
     { id: 'fixtures', label: 'Fixtures' },
     { id: 'plugins', label: 'Plugins' },
   ];
 
-  let tab = $state<Tab>((location.hash.slice(1) as Tab) || 'mixer');
+  const fromHash = location.hash.slice(1) as Tab;
+  let tab = $state<Tab>(TABS.some((t) => t.id === fromHash) ? fromHash : 'mixer');
   $effect(() => {
     location.hash = tab;
   });
@@ -32,14 +35,14 @@
     {/each}
   </div>
   <span class="spacer"></span>
-  {#if tab === 'mixer'}
+  {#if tab === 'mixer' || tab === 'scenes'}
     <select value={mixer.universe} onchange={(e) => mixer.selectUniverse(Number(e.currentTarget.value))}>
       {#each mixer.universes as u (u.id)}
         <option value={u.id}>U{u.id}{u.name ? ` · ${u.name}` : ''}</option>
       {/each}
       {#if !mixer.universes.length}<option value={mixer.universe}>U{mixer.universe}</option>{/if}
     </select>
-    <button onclick={() => mixer.clearAll()}>Clear</button>
+    {#if tab === 'mixer'}<button onclick={() => mixer.clearAll()}>Clear</button>{/if}
     <button class:alert={mixer.blackout} onclick={() => mixer.toggleBlackout()}>Blackout</button>
   {/if}
   <span class="dot" class:ok={mixer.online} title={mixer.online ? 'Connected' : 'olad unreachable'}></span>
@@ -47,6 +50,8 @@
 
 {#if tab === 'mixer'}
   <Mixer />
+{:else if tab === 'scenes'}
+  <Scenes />
 {:else if tab === 'patch'}
   <Patch />
 {:else if tab === 'fixtures'}
@@ -67,6 +72,21 @@
   .tabs {
     display: flex;
     gap: 4px;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto; /* safety net: never push the page wider than the screen */
+    scrollbar-width: none;
+  }
+  .tabs button {
+    white-space: nowrap;
+  }
+  @media (max-width: 480px) {
+    header > strong {
+      display: none; /* the tabs need the room */
+    }
+    .tabs button {
+      padding: 10px 9px;
+    }
   }
   .tabs button {
     background: transparent;

@@ -1,0 +1,56 @@
+# OLA Plus web UI
+
+A touch-first web UI for [OLA](https://www.openlighting.org/ola/) (Open Lighting Architecture):
+a DMX mixer, universe and fixture patching, and plugin management. Svelte 5 + Vite + TypeScript.
+It talks to `olad` over the HTTP API `olad` already exposes.
+
+| Tab | What it does |
+| --- | --- |
+| Mixer | Faders per channel or per fixture, master, blackout. Works with mouse, touch and keyboard. |
+| Scenes | Record the lit channels as a scene. Tap to fade to it (per-scene fade time), hold **Bump** to flash it over the mix. A scene is a *look* (replaces everything) or an *accent* (only its own channels). |
+| Patch | Universe ↔ input/output port patching, HTP/LTP, port priority; by universe or by device. |
+| Fixtures | DMX addressing with conflict detection; profiles from the Open Fixture Library. |
+| Plugins | Enable/disable plugins, reload. |
+
+## Run it
+
+```bash
+npm install
+npm run mock      # a stand-in olad on :9090 (MOCK_STOCK=1 imitates stock olad 0.10.x)
+npm run dev       # http://localhost:5173, proxies the API to OLA_URL (default http://127.0.0.1:9090)
+OLA_URL=http://raspberrypi.local:9090 npm run dev   # or point at a real olad
+```
+
+Only use a real olad you are happy to change: the UI writes DMX and patch changes to it.
+
+## Let olad serve it
+
+Build the UI and point an OLA Plus build of `olad` at the output (served at `/ui/`):
+
+```bash
+npm run build
+olad --ui-dir /path/to/ui/dist
+```
+
+## Compatibility
+
+Works against stock olad 0.10.x. An OLA Plus build adds `/json/patch_overview`, which returns
+every device and port in one request. Stock `olad` only reports the first free port of devices
+like Art-Net or sACN, so without it the Patch tab shows a notice and some ports appear only as
+you patch the earlier ones.
+
+Fixtures, profiles and scenes are currently saved in the browser (`localStorage`), so they are per device.
+Scenes belong to one universe and fade linearly; fades run in the browser, so closing the page stops a fade
+where it is.
+
+## Checks
+
+```bash
+npm run check     # svelte-check
+npm test          # unit tests
+OLA_URL=http://127.0.0.1:9090 npx vitest run src/lib/api.integration.test.ts   # API client vs a live olad (writes!)
+bash ci/smoke-ui-hosting.sh http://127.0.0.1:9090                              # /ui/ hosting vs a live olad
+```
+
+CI (`.github/workflows/ola-plus.yml`) builds `olad` from this tree and runs all of the above
+against it. The `olad-armhf` job (manual) cross-builds a Raspberry Pi OS (32-bit) binary.
