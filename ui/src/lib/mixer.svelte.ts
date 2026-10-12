@@ -21,9 +21,10 @@ class Mixer {
   #dirty = false;
   #lastEdit = 0;
   #bump: ReadonlyMap<number, number> | null = null;
+  #scale: ReadonlyMap<number, number> | null = null;
 
   output(): number[] {
-    return composeOutput(this.levels, this.master, this.blackout, this.#bump);
+    return composeOutput(this.levels, this.master, this.blackout, this.#bump, this.#scale);
   }
 
   get bumping() {
@@ -81,6 +82,12 @@ class Mixer {
     this.touch();
   }
 
+  /** Per-channel multipliers from group faders (null or empty: none). */
+  setScale(scale: ReadonlyMap<number, number> | null) {
+    this.#scale = scale && scale.size > 0 ? scale : null;
+    this.touch();
+  }
+
   setMaster(pct: number) {
     this.master = Math.max(0, Math.min(100, Math.round(pct)));
     this.touch();
@@ -114,10 +121,10 @@ class Mixer {
   }
 
   // Adopt changes made by other clients, but only while this one is idle and the output
-  // isn't being altered (scaled or bumped), otherwise we'd read that back as levels.
+  // isn't being altered (scaled, grouped or bumped), otherwise we'd read that back as levels.
   async #poll() {
     if (this.#dirty || Date.now() - this.#lastEdit < IDLE_BEFORE_POLL_MS) return;
-    if (this.master !== 100 || this.blackout || this.#bump) return;
+    if (this.master !== 100 || this.blackout || this.#bump || this.#scale) return;
     try {
       const d = await fetchDmx(this.universe);
       for (let i = 0; i < SLOTS; i++) {

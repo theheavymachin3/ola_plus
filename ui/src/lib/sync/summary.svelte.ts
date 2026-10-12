@@ -1,4 +1,5 @@
 import { fixtureStore } from '../fixtures/store.svelte';
+import { groupStore } from '../groups/store.svelte';
 import { sceneStore } from '../scenes/store.svelte';
 import type { SyncStatus } from './docSync';
 
@@ -10,7 +11,7 @@ export interface SyncSummary {
   hint: string;
 }
 
-const docs = () => [fixtureStore.profileDoc, fixtureStore.fixtureDoc, sceneStore.doc];
+const docs = () => [fixtureStore.profileDoc, fixtureStore.fixtureDoc, sceneStore.doc, groupStore.doc];
 
 /** One line about where the user's rig and scenes are kept, for the header. */
 export function syncSummary(now: number): SyncSummary {
@@ -33,8 +34,8 @@ export function syncSummary(now: number): SyncSummary {
     return {
       state: 'local',
       label: 'This device only',
-      hint: 'This olad has no shared storage (it needs an OLA Plus build). Fixtures and scenes stay in this browser.',
+      hint: 'This olad has no shared storage (it needs an OLA Plus build). Fixtures, scenes and groups stay in this browser.',
     };
   }
-  return { state: 'synced', label: 'Saved on olad', hint: 'Fixtures and scenes are stored on olad and shared by every device.' };
+  return { state: 'synced', label: 'Saved on olad', hint: 'Fixtures, scenes and groups are stored on olad and shared by every device.' };
 }

@@ -1,10 +1,11 @@
 <script lang="ts">
   import Fader from './Fader.svelte';
   import FixtureMixer from './FixtureMixer.svelte';
+  import GroupMixer from './GroupMixer.svelte';
   import { mixer } from '../lib/mixer.svelte';
 
   let page = $state(0);
-  let view = $state<'channels' | 'fixtures'>('channels');
+  let view = $state<'channels' | 'fixtures' | 'groups'>('channels');
   let width = $state(0);
 
   // As many faders as fit; ~64px per strip is the minimum comfortable touch width.
@@ -22,6 +23,7 @@
     <div class="seg" role="tablist" aria-label="Mixer view">
       <button role="tab" aria-selected={view === 'channels'} class:on={view === 'channels'} onclick={() => (view = 'channels')}>Channels</button>
       <button role="tab" aria-selected={view === 'fixtures'} class:on={view === 'fixtures'} onclick={() => (view = 'fixtures')}>Fixtures</button>
+      <button role="tab" aria-selected={view === 'groups'} class:on={view === 'groups'} onclick={() => (view = 'groups')}>Groups</button>
     </div>
     {#if view === 'channels'}
       <div class="bank" style:--n={channels.length}>
@@ -29,8 +31,10 @@
           <Fader label={String(ch + 1)} value={mixer.levels[ch]} onchange={(v) => mixer.setLevel(ch, v)} />
         {/each}
       </div>
-    {:else}
+    {:else if view === 'fixtures'}
       <FixtureMixer />
+    {:else}
+      <GroupMixer />
     {/if}
   </div>
 

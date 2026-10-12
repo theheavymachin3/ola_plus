@@ -64,18 +64,20 @@ export function lerpLevels(from: ArrayLike<number>, to: ArrayLike<number>, t: nu
 }
 
 /**
- * What actually goes to olad: operator levels scaled by master, with any bump held on top
- * (highest value wins). Blackout silences everything, bumps included.
+ * What actually goes to olad: operator levels scaled by master and by any group fader
+ * (`scale`: channel -> 0..1), with any bump held on top (highest value wins). Blackout
+ * silences everything, bumps included.
  */
 export function composeOutput(
   levels: ArrayLike<number>,
   master: number,
   blackout: boolean,
   bump: ReadonlyMap<number, number> | null,
+  scale: ReadonlyMap<number, number> | null = null,
 ): number[] {
   const k = blackout ? 0 : master / 100;
   const out = new Array<number>(SLOTS);
-  for (let i = 0; i < SLOTS; i++) out[i] = Math.round((levels[i] ?? 0) * k);
+  for (let i = 0; i < SLOTS; i++) out[i] = Math.round((levels[i] ?? 0) * k * (scale?.get(i) ?? 1));
   if (!blackout && bump) {
     for (const [ch, v] of bump) if (ch >= 0 && ch < SLOTS) out[ch] = Math.max(out[ch], v);
   }

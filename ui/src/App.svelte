@@ -6,6 +6,7 @@
   import Plugins from './components/Plugins.svelte';
   import Scenes from './components/Scenes.svelte';
   import { fixtureStore } from './lib/fixtures/store.svelte';
+  import { groupStore } from './lib/groups/store.svelte';
   import { mixer } from './lib/mixer.svelte';
   import { sceneStore } from './lib/scenes/store.svelte';
   import { syncSummary } from './lib/sync/summary.svelte';
@@ -33,6 +34,7 @@
     mixer.start();
     fixtureStore.start();
     sceneStore.start();
+    groupStore.start();
     const t = setInterval(() => (now = Date.now()), 1000);
     return () => clearInterval(t);
   });

@@ -102,6 +102,14 @@ describe('composeOutput', () => {
   it('blackout silences levels and bumps alike', () => {
     expect(composeOutput(levels, 100, true, new Map([[0, 255]]))).toEqual(zeros());
   });
+  it('scales group channels, multiplied with master', () => {
+    const o = composeOutput(levels, 50, false, null, new Map([[0, 0.5]]));
+    expect([o[0], o[1]]).toEqual([50, 50]);
+  });
+  it('a bump ignores group scaling too', () => {
+    const o = composeOutput(levels, 100, false, new Map([[0, 255]]), new Map([[0, 0]]));
+    expect(o[0]).toBe(255);
+  });
   it('ignores bump channels outside the universe', () => {
     expect(composeOutput(zeros(), 100, false, new Map([[999, 255]]))).toHaveLength(SLOTS);
   });
