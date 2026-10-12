@@ -1,0 +1,16 @@
+#!/bin/sh
+# prerm for ola-plus: stop the daemon before its files go away.
+set -e
+
+case "$1" in
+remove | deconfigure | upgrade)
+    if [ -d /run/systemd/system ]; then
+        systemctl stop olad.service || true
+        if [ "$1" = "remove" ]; then
+            systemctl disable olad.service > /dev/null 2>&1 || true
+        fi
+    fi
+    ;;
+esac
+
+exit 0

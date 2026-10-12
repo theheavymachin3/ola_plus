@@ -19,6 +19,7 @@
  */
 
 #include <sys/time.h>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -31,6 +32,7 @@
 #include "ola/StringUtils.h"
 #include "ola/base/Version.h"
 #include "ola/dmx/SourcePriorities.h"
+#include "ola/file/Util.h"
 #include "ola/network/NetworkUtils.h"
 #include "ola/web/Json.h"
 #include "olad/DmxSource.h"
@@ -67,6 +69,27 @@ const char OladHTTPServer::K_BACKEND_DISCONNECTED_ERROR[] =
 const char OladHTTPServer::K_PRIORITY_VALUE_SUFFIX[] = "_priority_value";
 const char OladHTTPServer::K_PRIORITY_MODE_SUFFIX[] = "_priority_mode";
 
+namespace {
+/**
+ * @brief Find the web UI to serve at /ui/.
+ *
+ * An explicit --ui-dir wins. Otherwise a UI installed next to the classic one
+ * (<data dir>/ui, as the OLA Plus package does) is used if it has an index.html.
+ * @returns the directory, or an empty string if there is no UI.
+ */
+string ResolveUiDirectory(const string &configured, const string &data_dir) {
+  if (!configured.empty()) {
+    return configured;
+  }
+  if (data_dir.empty()) {
+    return "";
+  }
+  const string candidate = ola::file::JoinPaths(data_dir, "ui");
+  std::ifstream probe(ola::file::JoinPaths(candidate, "index.html").c_str());
+  return probe.is_open() ? candidate : "";
+}
+}  // namespace
+
 /**
  * @brief Create a new OLA HTTP server
  * @param export_map the ExportMap to display when /debug is called
@@ -88,9 +111,10 @@ OladHTTPServer::OladHTTPServer(ExportMap *export_map,
       m_enable_quit(options.enable_quit),
       m_interface(iface),
       m_rdm_module(&m_server, &m_client) {
-  if (!options.ui_dir.empty()) {
+  const string ui_dir = ResolveUiDirectory(options.ui_dir, options.data_dir);
+  if (!ui_dir.empty()) {
     // The OLA Plus single page UI, served from its build output directory.
-    m_server.RegisterStaticDirectory("/ui", options.ui_dir);
+    m_server.RegisterStaticDirectory("/ui", ui_dir);
   }
 
   // The main handlers
@@ -136,7 +160,14 @@ OladHTTPServer::OladHTTPServer(ExportMap *export_map,
   m_server.RegisterFile("/toolbar_sprites.png", HTTPServer::CONTENT_TYPE_PNG);
   m_server.RegisterFile("/vertical.gif", HTTPServer::CONTENT_TYPE_GIF);
   m_server.RegisterFile("/warning.png", HTTPServer::CONTENT_TYPE_PNG);
-  m_server.RegisterFile("/", "landing.html", HTTPServer::CONTENT_TYPE_HTML);
+  if (ui_dir.empty()) {
+    m_server.RegisterFile("/", "landing.html", HTTPServer::CONTENT_TYPE_HTML);
+  } else {
+    // With the new UI present it is the front door; the classic UI stays at /classic.
+    RegisterHandler("/", &OladHTTPServer::RedirectToUi);
+    m_server.RegisterFile("/classic", "landing.html",
+                          HTTPServer::CONTENT_TYPE_HTML);
+  }
 
   // these are the static files for the new UI
   m_server.RegisterFile(
@@ -585,6 +616,15 @@ int OladHTTPServer::JsonAvailablePorts(const HTTPRequest *request,
                           response));
   }
   return MHD_YES;
+}
+
+
+/**
+ * @brief Send browsers that open the server root to the OLA Plus UI.
+ */
+int OladHTTPServer::RedirectToUi(OLA_UNUSED const HTTPRequest *request,
+                                 HTTPResponse *response) {
+  return HTTPServer::ServeRedirect(response, "/ui/");
 }
 
 

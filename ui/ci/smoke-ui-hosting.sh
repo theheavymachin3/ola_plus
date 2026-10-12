@@ -57,6 +57,9 @@ check "POST is not served" 404 "$(status -X POST -d x=1 "$BASE/ui/")"
 
 # The API must be untouched and olad still alive after all of the above.
 check "API still works" 200 "$(status "$BASE/json/server_stats")"
-check "legacy UI still works" 200 "$(status "$BASE/")"
+# With the new UI present it is the front door; the classic UI moves to /classic.
+check "root redirects to the new UI" 302 "$(status "$BASE/")"
+check "root redirect target" "/ui/" "$(header location "$BASE/")"
+check "classic UI still reachable" 200 "$(status "$BASE/classic")"
 
 exit $fail

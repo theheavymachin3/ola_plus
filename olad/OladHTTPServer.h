@@ -78,6 +78,8 @@ class OladHTTPServer: public ola::http::OlaHTTPServer {
                        ola::http::HTTPResponse *response);
   int JsonAvailablePorts(const ola::http::HTTPRequest *request,
                          ola::http::HTTPResponse *response);
+  int RedirectToUi(const ola::http::HTTPRequest *request,
+                   ola::http::HTTPResponse *response);
   int JsonPatchOverview(const ola::http::HTTPRequest *request,
                         ola::http::HTTPResponse *response);
   int JsonUiStore(const ola::http::HTTPRequest *request,

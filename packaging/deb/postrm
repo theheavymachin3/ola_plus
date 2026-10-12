@@ -1,0 +1,18 @@
+#!/bin/sh
+# postrm for ola-plus. The "olad" user and /etc/ola (plugin settings, universes) are left alone
+# even on purge: they are the user's, and may be wanted by the Debian ola package again.
+set -e
+
+case "$1" in
+remove | purge | upgrade | disappear)
+    ldconfig
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload || true
+    fi
+    if command -v udevadm > /dev/null 2>&1; then
+        udevadm control --reload-rules > /dev/null 2>&1 || true
+    fi
+    ;;
+esac
+
+exit 0

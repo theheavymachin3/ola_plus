@@ -122,16 +122,32 @@ jobs:
           echo "$doc"
           echo "$doc" | jq -e '.rev == 2 and .data.second == true'
           ls "$RUNNER_TEMP/olacfg"
+      - name: UI found next to the classic one, with no --ui-dir (as the package installs it)
+        run: |
+          pkill -f "olad --config-dir" || true
+          sleep 2
+          cp -r olad/www "$RUNNER_TEMP/www"
+          cp -r ui/dist "$RUNNER_TEMP/www/ui"
+          mkdir -p "$RUNNER_TEMP/olacfg2"
+          ./olad/olad --config-dir "$RUNNER_TEMP/olacfg2" --log-level 3 --http-port 9090 --rpc-port 9011 \
+            --http-data-dir "$RUNNER_TEMP/www" \
+            >> "$RUNNER_TEMP/olad.log" 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:9090/json/server_stats >/dev/null && break
+            sleep 1
+          done
+          bash ui/ci/smoke-ui-hosting.sh http://127.0.0.1:9090
       - name: olad log
         if: always()
         run: cat "$RUNNER_TEMP/olad.log" || true
 
-  # Manual only: a 32-bit ARM (Raspberry Pi OS / Debian trixie) build of olad plus the UI,
-  # to try on real hardware. Cross-compiled in a trixie container so library versions match
-  # the Pi. The host-side ola_protoc_plugin is built natively and reused (OLA's own
+  # Manual only: builds the ola-plus Debian package for 32-bit ARM (Raspberry Pi OS) and
+  # proves it installs over the Debian `ola` package. Cross-compiled in a trixie container so
+  # library versions match the Pi; a natively built ola_protoc_plugin is reused (OLA's own
   # cross-compile mechanism).
-  olad-armhf:
+  deb-armhf:
     if: github.event_name == 'workflow_dispatch'
+    needs: ui
     runs-on: ubuntu-latest
     container: debian:trixie
     timeout-minutes: 120
@@ -141,16 +157,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: ola-plus-ui-dist
+          path: ui-dist
       - name: Install toolchains and libraries
         run: |
           dpkg --add-architecture armhf
           apt-get update
-          apt-get install -y --no-install-recommends \
-            build-essential crossbuild-essential-armhf autoconf automake libtool pkgconf bison flex ccache \
-            protobuf-compiler libprotobuf-dev libprotoc-dev uuid-dev libmicrohttpd-dev libcppunit-dev \
-            libprotobuf-dev:armhf uuid-dev:armhf libmicrohttpd-dev:armhf libcppunit-dev:armhf \
-            libncurses-dev:armhf zlib1g-dev:armhf libusb-1.0-0-dev:armhf libftdi1-dev:armhf \
-            liblo-dev:armhf libavahi-client-dev:armhf
+          apt-get install -y --no-install-recommends             build-essential crossbuild-essential-armhf autoconf automake libtool pkgconf bison flex ccache file             protobuf-compiler libprotobuf-dev libprotoc-dev uuid-dev libmicrohttpd-dev libcppunit-dev             libprotobuf-dev:armhf uuid-dev:armhf libmicrohttpd-dev:armhf libcppunit-dev:armhf             libncurses-dev:armhf zlib1g-dev:armhf libusb-1.0-0-dev:armhf libftdi1-dev:armhf             liblo-dev:armhf libavahi-client-dev:armhf
       - name: autoreconf
         run: autoreconf -i
       - name: Build the host ola_protoc_plugin
@@ -158,22 +173,42 @@ jobs:
           mkdir build-host && cd build-host
           ../configure CPPFLAGS=-Wno-deprecated-declarations
           make -j"$(nproc)" protoc/ola_protoc_plugin
-      - name: Cross-configure for armhf
+      - name: Cross-configure for armhf (Debian layout, so it replaces the ola package)
         run: |
           mkdir build-arm && cd build-arm
           export PKG_CONFIG_LIBDIR=/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig
-          ../configure --host=arm-linux-gnueabihf \
-            --with-ola-protoc-plugin="$GITHUB_WORKSPACE/build-host/protoc/ola_protoc_plugin" \
-            CPPFLAGS=-Wno-deprecated-declarations
+          ../configure --host=arm-linux-gnueabihf             --prefix=/usr --sysconfdir=/etc --localstatedir=/var             --libdir=/usr/lib/arm-linux-gnueabihf             --with-ola-protoc-plugin="$GITHUB_WORKSPACE/build-host/protoc/ola_protoc_plugin"             CPPFLAGS=-Wno-deprecated-declarations
       - name: Cross-build and stage
         run: |
           cd build-arm
           make -j"$(nproc)"
           make install DESTDIR="$GITHUB_WORKSPACE/stage"
-          cd "$GITHUB_WORKSPACE"
-          tar -C stage -czf ola-plus-armhf.tar.gz .
-          file stage/usr/local/bin/olad || true
+      - name: Build the .deb
+        run: |
+          VERSION="0.10.9+plus$(date -u +%Y%m%d)+g$(git rev-parse --short HEAD)"
+          bash packaging/deb/build-deb.sh stage ui-dist "$VERSION" armhf out arm-linux-gnueabihf-strip
+          ls -l out
       - uses: actions/upload-artifact@v4
         with:
-          name: ola-plus-armhf
-          path: ola-plus-armhf.tar.gz
+          name: ola-plus-deb-armhf
+          path: out/*.deb
+
+  # Manual only: installs the package over the Debian ola package in a 32-bit ARM trixie
+  # container (QEMU), runs olad from it, checks the UI and API, and rolls back to ola.
+  deb-test:
+    if: github.event_name == 'workflow_dispatch'
+    needs: deb-armhf
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ola-plus-deb-armhf
+          path: deb
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+      - name: Replace Debian ola with ola-plus, run it, roll back
+        run: |
+          docker run --rm --platform linux/arm/v7 -v "$PWD:/work" -w /work debian:trixie             bash /work/packaging/deb/test-install.sh /work/deb /work

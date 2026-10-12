@@ -1,0 +1,40 @@
+#!/bin/sh
+# postinst for ola-plus. Safe to run again; never deletes or rewrites anyone's configuration.
+set -e
+
+case "$1" in
+configure)
+    # The daemon runs as "olad". An existing user (from the Debian ola package) is kept as it is.
+    getent group olad > /dev/null || addgroup --system olad
+    getent passwd olad > /dev/null ||
+        adduser --system --home /usr/lib/olad --no-create-home --ingroup olad olad
+    # USB/serial DMX interfaces need these groups.
+    for g in dialout plugdev; do
+        if getent group "$g" > /dev/null && ! id -nG olad | tr ' ' '\n' | grep -qx "$g"; then
+            adduser olad "$g"
+        fi
+    done
+
+    # The configuration directory (plugin settings, universes) is kept across the switch from
+    # the Debian package; just make sure olad can use it.
+    mkdir -p /etc/ola
+    chown -R olad:olad /etc/ola
+    chmod g+s /etc/ola
+
+    ldconfig
+
+    if command -v udevadm > /dev/null 2>&1; then
+        udevadm control --reload-rules > /dev/null 2>&1 || true
+        udevadm trigger --subsystem-match=usb --action=add > /dev/null 2>&1 || true
+    fi
+
+    # Only when systemd is the running init (not in a container or chroot).
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload || true
+        systemctl enable olad.service > /dev/null 2>&1 || true
+        systemctl restart olad.service || echo "ola-plus: olad did not start, see: journalctl -u olad" >&2
+    fi
+    ;;
+esac
+
+exit 0

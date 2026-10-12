@@ -1,0 +1,26 @@
+[Unit]
+Description=OLA Plus - Open Lighting Architecture daemon
+Documentation=man:olad(1) https://github.com/theheavymachin3/ola_plus
+After=network-online.target remote-fs.target
+Wants=network-online.target
+
+[Service]
+# olad runs in the foreground, so systemd supervises it directly.
+User=olad
+UMask=0002
+Environment=LOG_LEVEL=3
+Environment=CONFIG_DIR=/etc/ola
+Environment=OLAD_OPTS=
+ExecStart=/usr/bin/olad --syslog --log-level $LOG_LEVEL --config-dir $CONFIG_DIR $OLAD_OPTS
+Restart=on-failure
+RestartSec=2
+
+# olad only needs to write its configuration directory.
+NoNewPrivileges=true
+ProtectHome=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=-/etc/ola
+
+[Install]
+WantedBy=multi-user.target

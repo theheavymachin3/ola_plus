@@ -1,0 +1,21 @@
+Package: ola-plus
+Version: @VERSION@
+Section: electronics
+Priority: optional
+Architecture: @ARCH@
+Installed-Size: @SIZE@
+Maintainer: OLA Plus <noreply@users.noreply.github.com>
+Depends: libc6 (>= 2.38), libstdc++6 (>= 13.1), libgcc-s1 (>= 3.5), libncurses6, libtinfo6, libprotobuf32t64 (>= 3.21.12), libmicrohttpd12t64 (>= 0.9.50), libuuid1 (>= 2.16), libusb-1.0-0 (>= 2:1.0.22), libftdi1-2 (>= 1.2), liblo7 (>= 0.26~repack), libavahi-client3 (>= 0.6.16), libavahi-common3 (>= 0.6.16), adduser
+Conflicts: ola, libola1t64, libola1
+Replaces: ola, libola1t64, libola1
+Provides: ola (= 0.10.9), libola1t64 (= 0.10.9)
+Homepage: https://github.com/theheavymachin3/ola_plus
+Description: OLA Plus - Open Lighting Architecture with a modern web UI
+ A fork of the Open Lighting Architecture (OLA) DMX512 / Art-Net / sACN
+ framework. It adds a touch-first web UI (mixer, scenes with fade and bump,
+ groups, universe and fixture patching, plugin management) served by olad at
+ /ui/, and the olad endpoints it needs: a complete patch overview, and shared
+ storage for fixtures, scenes and groups.
+ .
+ This package replaces the Debian ola and libola1t64 packages. The olad
+ configuration in /etc/ola is kept as it is.
