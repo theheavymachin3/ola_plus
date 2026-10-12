@@ -33,6 +33,14 @@ check "index.html references a bundle" "yes" "$([ -n "$asset" ] && echo yes || e
 check "GET bundle is 200" 200 "$(status "$BASE/ui/$asset")"
 check "bundle content type" "text/javascript; charset=utf-8" "$(header content-type "$BASE/ui/$asset")"
 
+# PWA files: installable manifest, icons and the service worker script, with the right types.
+check "manifest type" "application/manifest+json" "$(header content-type "$BASE/ui/manifest.webmanifest")"
+check "manifest is JSON naming the app" "yes" "$(curl -s "$BASE/ui/manifest.webmanifest" | grep -q '"OLA Plus"' && echo yes || echo no)"
+check "icon type" "image/png" "$(header content-type "$BASE/ui/icons/icon-192.png")"
+check "icon 512 is served" 200 "$(status "$BASE/ui/icons/icon-512.png")"
+check "favicon type" "image/svg+xml" "$(header content-type "$BASE/ui/favicon.svg")"
+check "service worker script type" "text/javascript; charset=utf-8" "$(header content-type "$BASE/ui/sw.js")"
+
 # Single page app routes fall back to index.html; missing files must 404.
 check "client route falls back to index.html" 200 "$(status "$BASE/ui/patch")"
 contains "fallback body is the app" '<div id="app">' "$(curl -s "$BASE/ui/patch")"
