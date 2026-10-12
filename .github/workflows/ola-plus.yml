@@ -141,14 +141,22 @@ jobs:
         if: always()
         run: cat "$RUNNER_TEMP/olad.log" || true
 
-  # Manual only: builds the ola-plus Debian package for 32-bit ARM (Raspberry Pi OS) and
-  # proves it installs over the Debian `ola` package. Cross-compiled in a trixie container so
-  # library versions match the Pi; a natively built ola_protoc_plugin is reused (OLA's own
-  # cross-compile mechanism).
-  deb-armhf:
+  # Manual only: builds the ola-plus Debian package for amd64, arm64 and armhf (32-bit
+  # Raspberry Pi OS) in a Debian trixie container, so library versions match what runs it.
+  # amd64 and arm64 build natively (arm64 on GitHub's ARM runners); armhf is cross-compiled.
+  # See packaging/deb/build-arch.sh, which is also how to reproduce a package locally.
+  deb:
+    name: deb (${{ matrix.arch }})
     if: github.event_name == 'workflow_dispatch'
     needs: ui
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-latest }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+          - { arch: armhf, runner: ubuntu-latest }
+    runs-on: ${{ matrix.runner }}
     container: debian:trixie
     timeout-minutes: 120
     steps:
@@ -161,58 +169,39 @@ jobs:
         with:
           name: ola-plus-ui-dist
           path: ui-dist
-      - name: Install toolchains and libraries
-        run: |
-          dpkg --add-architecture armhf
-          apt-get update
-          apt-get install -y --no-install-recommends             build-essential crossbuild-essential-armhf autoconf automake libtool pkgconf bison flex ccache file             protobuf-compiler libprotobuf-dev libprotoc-dev uuid-dev libmicrohttpd-dev libcppunit-dev             libprotobuf-dev:armhf uuid-dev:armhf libmicrohttpd-dev:armhf libcppunit-dev:armhf             libncurses-dev:armhf zlib1g-dev:armhf libusb-1.0-0-dev:armhf libftdi1-dev:armhf             liblo-dev:armhf libavahi-client-dev:armhf
-      - name: autoreconf
-        run: autoreconf -i
-      - name: Build the host ola_protoc_plugin
-        run: |
-          mkdir build-host && cd build-host
-          ../configure CPPFLAGS=-Wno-deprecated-declarations
-          make -j"$(nproc)" protoc/ola_protoc_plugin
-      - name: Cross-configure for armhf (Debian layout, so it replaces the ola package)
-        run: |
-          mkdir build-arm && cd build-arm
-          export PKG_CONFIG_LIBDIR=/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig
-          ../configure --host=arm-linux-gnueabihf             --prefix=/usr --sysconfdir=/etc --localstatedir=/var             --libdir=/usr/lib/arm-linux-gnueabihf             --with-ola-protoc-plugin="$GITHUB_WORKSPACE/build-host/protoc/ola_protoc_plugin"             CPPFLAGS=-Wno-deprecated-declarations
-      - name: Cross-build and stage
-        run: |
-          cd build-arm
-          make -j"$(nproc)"
-          make install DESTDIR="$GITHUB_WORKSPACE/stage"
-      - name: Build the .deb
-        run: |
-          # The workspace is owned by the runner user, not the container's root.
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          # Date AND time: the version must grow with every build or apt calls a same-day rebuild a
-          # downgrade (it would otherwise be decided by the git hash).
-          VERSION="0.10.9+plus$(date -u +%Y%m%d%H%M%S)+g$(git rev-parse --short HEAD)"
-          bash packaging/deb/build-deb.sh stage ui-dist "$VERSION" armhf out arm-linux-gnueabihf-strip
-          ls -l out
+      - name: Build the package
+        run: bash packaging/deb/build-arch.sh ${{ matrix.arch }} ui-dist out
       - uses: actions/upload-artifact@v4
         with:
-          name: ola-plus-deb-armhf
+          name: ola-plus-deb-${{ matrix.arch }}
           path: out/*.deb
 
-  # Manual only: installs the package over the Debian ola package in a 32-bit ARM trixie
-  # container (QEMU), runs olad from it, checks the UI and API, and rolls back to ola.
+  # Manual only: installs each package over the Debian ola package in a container of its own
+  # architecture (native for amd64 and arm64, QEMU for armhf), runs olad from it, checks the
+  # UI and API, and rolls back to ola.
   deb-test:
+    name: deb-test (${{ matrix.arch }})
     if: github.event_name == 'workflow_dispatch'
-    needs: deb-armhf
-    runs-on: ubuntu-latest
+    needs: deb
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-latest, platform: linux/amd64, qemu: false }
+          - { arch: arm64, runner: ubuntu-24.04-arm, platform: linux/arm64, qemu: false }
+          - { arch: armhf, runner: ubuntu-latest, platform: linux/arm/v7, qemu: true }
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: ola-plus-deb-armhf
+          name: ola-plus-deb-${{ matrix.arch }}
           path: deb
       - uses: docker/setup-qemu-action@v3
+        if: matrix.qemu
         with:
           platforms: arm
       - name: Replace Debian ola with ola-plus, run it, roll back
         run: |
-          docker run --rm --platform linux/arm/v7 -v "$PWD:/work" -w /work debian:trixie             bash /work/packaging/deb/test-install.sh /work/deb /work
+          docker run --rm --platform ${{ matrix.platform }} -v "$PWD:/work" -w /work debian:trixie             bash /work/packaging/deb/test-install.sh /work/deb /work

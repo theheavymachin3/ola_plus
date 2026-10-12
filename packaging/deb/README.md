@@ -1,23 +1,31 @@
 # OLA Plus Debian package
 
 `ola-plus` installs OLA with the new web UI as a systemd service, **replacing** the Debian `ola` and
-`libola1t64` packages. It is built for 32-bit ARM (`armhf`: Raspberry Pi OS 32-bit, Debian trixie) by the
-`deb-armhf` CI job, and `deb-test` proves in a 32-bit ARM container that it installs over `ola`, runs,
-serves the UI and rolls back.
+`libola1t64` packages. It is built for Debian trixie / Raspberry Pi OS by the `deb` CI jobs, one per architecture:
+
+| Package | For | Built |
+| --- | --- | --- |
+| `ola-plus_<version>_amd64.deb` | PCs and servers (Debian, Ubuntu-like systems on trixie libraries) | natively |
+| `ola-plus_<version>_arm64.deb` | Raspberry Pi 3/4/5 with the 64-bit OS (the default for Pi 4 and 5) | natively on an ARM runner |
+| `ola-plus_<version>_armhf.deb` | Raspberry Pi with the 32-bit OS | cross-compiled |
+
+and the `deb-test` jobs prove, in a container of the same architecture, that each installs over `ola`,
+runs, serves the UI and rolls back. The version comes from the commit (`0.10.9+plus<commit time>+g<hash>`),
+so all three packages from one commit share it and later commits sort higher.
 
 ## Install (replacing the Debian ola)
 
-Download `ola-plus_<version>_armhf.deb` from the `ola-plus-deb-armhf` artifact of a green
+Download the `.deb` for your architecture (`ola-plus-deb-amd64`, `-arm64` or `-armhf` artifact) of a green
 [Actions](../../../../actions) run, copy it to the Pi and look at what apt would do first:
 
 ```bash
-apt-get -s install ./ola-plus_*_armhf.deb        # simulation, changes nothing
+apt-get -s install ./ola-plus_*.deb        # simulation, changes nothing
 ```
 
 It should list `ola` and `libola1t64` as **REMOVED** and `ola-plus` as installed. Then:
 
 ```bash
-sudo apt install ./ola-plus_*_armhf.deb
+sudo apt install ./ola-plus_*.deb
 ```
 
 What happens:
@@ -52,13 +60,20 @@ sudo apt install ola libola1t64      # removes ola-plus, keeps /etc/ola
 
 ## What is not done
 
-- Only `armhf`. An `arm64` or `amd64` package needs another CI job.
+- Only for Debian 13 "trixie" and systems with the same library versions; other releases need their own build.
 - No Python bindings, RDM test server or development headers; this is the daemon and its tools.
 - olad has no authentication: anyone on the network can use the UI and change documents. Only run it on a
   network you trust.
 
 ## Building it yourself
 
-CI does this in `.github/workflows/ola-plus.yml` (job `deb-armhf`). The package is assembled from a
-`make install` tree configured with `--prefix=/usr --sysconfdir=/etc --localstatedir=/var
---libdir=/usr/lib/arm-linux-gnueabihf` by `packaging/deb/build-deb.sh`.
+CI does this in `.github/workflows/ola-plus.yml` (job `deb`), and you can reproduce any package locally with
+Docker (the UI must be built first, `npm run build` in `ui/`):
+
+```bash
+docker run --rm -v "$PWD:/work" -w /work debian:trixie   bash packaging/deb/build-arch.sh arm64 ui/dist out     # or amd64 / armhf
+```
+
+`build-arch.sh` builds natively when the target is the machine's own architecture and cross-compiles
+otherwise, then `build-deb.sh` assembles the package from a `make install` tree configured with
+`--prefix=/usr --sysconfdir=/etc --localstatedir=/var --libdir=/usr/lib/<multiarch>`.
