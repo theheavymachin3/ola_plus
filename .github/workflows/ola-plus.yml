@@ -56,7 +56,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential autoconf automake libtool pkg-config bison flex ccache \
-            libprotobuf-dev libprotoc-dev protobuf-compiler uuid-dev libmicrohttpd-dev \
+            libprotobuf-dev libprotoc-dev protobuf-compiler uuid-dev libmicrohttpd-dev libcppunit-dev \
             libncurses-dev zlib1g-dev libusb-1.0-0-dev libftdi-dev liblo-dev libavahi-client-dev
       - uses: actions/cache@v4
         with:
