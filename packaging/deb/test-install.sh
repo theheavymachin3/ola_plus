@@ -49,6 +49,32 @@ olad --version
 grep -q '^ExecStart=/usr/bin/olad' /usr/lib/systemd/system/olad.service || fail "unit has no ExecStart"
 dpkg -L ola-plus | grep -E 'ola-plus|olad.service|60-ola.rules' | sed -n '1,10p'
 
+step "maintainer scripts drive systemd as intended (with a fake systemctl)"
+# A container has no systemd, so pretend: a fake systemctl records what the scripts ask of it.
+mkdir -p /run/systemd/system /tmp/fakebin
+cat > /tmp/fakebin/systemctl <<'EOF2'
+#!/bin/sh
+echo "systemctl $*" >> /tmp/systemctl.log
+EOF2
+chmod +x /tmp/fakebin/systemctl
+script() { # <script> <args...>: run an installed maintainer script, return what it asked systemctl
+  : > /tmp/systemctl.log
+  s=$1; shift
+  PATH=/tmp/fakebin:$PATH sh "/var/lib/dpkg/info/ola-plus.$s" "$@" > /dev/null
+  cat /tmp/systemctl.log
+}
+out=$(script prerm upgrade 99.0)
+echo "prerm upgrade -> [$out]"
+echo "$out" | grep -q "stop" && fail "prerm must not stop olad on an upgrade (that is what made the pause a minute long)"
+out=$(script postinst configure 0.0.1)
+echo "postinst configure (upgrade) -> [$(echo $out)]"
+echo "$out" | grep -q "restart olad.service" || fail "postinst must restart olad after an upgrade"
+out=$(script prerm remove)
+echo "prerm remove -> [$(echo $out)]"
+echo "$out" | grep -q "stop olad.service" || fail "prerm must stop olad when the package is removed"
+echo "$out" | grep -q "disable olad.service" || fail "prerm must disable olad when the package is removed"
+rm -rf /run/systemd/system /tmp/fakebin /tmp/systemctl.log
+
 step "run olad as the olad user with the installed defaults (no --ui-dir)"
 nohup runuser -u olad -- /usr/bin/olad --config-dir /etc/ola --log-level 3 > /tmp/olad.log 2>&1 &
 for _ in $(seq 1 90); do

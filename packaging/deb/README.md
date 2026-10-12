@@ -31,7 +31,7 @@ sudo apt install ./ola-plus_*.deb
 What happens:
 
 - the Debian `ola` and `libola1t64` packages are removed and `olad` is restarted from `ola-plus`;
-  expect a short interruption of DMX output while it restarts;
+  on an upgrade `olad` is restarted once the new files are in place, so DMX output pauses for the restart only (a few seconds);
 - `/etc/ola` (plugin settings, universes, patch) is **kept as it is**, and so is the `olad` user;
 - `olad.service` is a systemd unit (the old SysV script goes away with the old package) and starts at boot;
 - the UI is installed next to the classic one. Open `http://<pi>:9090/` and you land on `/ui/`; the classic UI

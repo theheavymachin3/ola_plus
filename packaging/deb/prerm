@@ -1,9 +1,14 @@
 #!/bin/sh
-# prerm for ola-plus: stop the daemon before its files go away.
+# prerm for ola-plus. The daemon is stopped only when the package goes away.
+#
+# On an upgrade it is deliberately NOT stopped here: the postinst restarts it once the new files
+# are in place, so DMX output pauses for the restart itself (a couple of seconds) instead of for
+# the whole unpack-and-configure. The running process keeps its old binary and libraries, which
+# dpkg replaces by renaming new files over them.
 set -e
 
 case "$1" in
-remove | deconfigure | upgrade)
+remove | deconfigure)
     if [ -d /run/systemd/system ]; then
         systemctl stop olad.service || true
         if [ "$1" = "remove" ]; then
