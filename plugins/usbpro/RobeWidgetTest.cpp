@@ -272,6 +272,8 @@ void RobeWidgetTest::testSendDMXTrimsTrailingZeros() {
   DmxBuffer buffer;
   buffer.Blackout();
   buffer.SetChannel(2, 9);
+  uint8_t opener[] = {0, 0, 0, 0, 0};  // the first long frame is opened with one channel
+  m_endpoint->AddExpectedRobeMessage(DMX_FRAME_LABEL, opener, sizeof(opener), NULL);
   uint8_t trimmed[] = {0, 0, 9, 0, 0, 0, 0};
   m_endpoint->AddExpectedRobeMessage(
       DMX_FRAME_LABEL,
@@ -314,6 +316,14 @@ void RobeWidgetTest::testSendDMX() {
 
   // expected message
   uint8_t dmx_frame_data[] = {0, 1, 2, 3, 4, 0, 0, 0, 0};
+  // the first frame is opened with a single channel: the interface only starts
+  // on a short frame
+  uint8_t opener_data[] = {0, 0, 0, 0, 0};
+  m_endpoint->AddExpectedRobeMessage(
+      DMX_FRAME_LABEL,
+      opener_data,
+      sizeof(opener_data),
+      NULL);
   // add the expected data, run and verify.
   m_endpoint->AddExpectedRobeMessage(
       DMX_FRAME_LABEL,

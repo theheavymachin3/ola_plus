@@ -64,7 +64,8 @@ RobeWidgetImpl::RobeWidgetImpl(ola::io::ConnectedDescriptor *descriptor,
       m_pending_request(NULL),
       m_uid(uid),
       m_transaction_number(0),
-      m_last_dmx_length(0) {
+      m_last_dmx_length(0),
+      m_dmx_started(false) {
 }
 
 
@@ -109,6 +110,17 @@ bool RobeWidgetImpl::SendDMX(const DmxBuffer &buffer) {
   }
 
   bool ok = true;
+  if (!m_dmx_started) {
+    m_dmx_started = true;
+    if (used > 1) {
+      // The interface only starts on a short frame, so open with one channel
+      // (its real value, so nothing glitches) before the full frame.
+      ok = SendMessage(CHANNEL_A_OUT,
+                       reinterpret_cast<uint8_t*>(&output_data),
+                       1 + 4);
+      m_last_dmx_length = 1;
+    }
+  }
   if (used < m_last_dmx_length) {
     ok = SendMessage(CHANNEL_A_OUT,
                      reinterpret_cast<uint8_t*>(&output_data),

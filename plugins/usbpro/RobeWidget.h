@@ -92,6 +92,7 @@ class RobeWidgetImpl: public BaseRobeWidget,
     const ola::rdm::UID m_uid;
     uint8_t m_transaction_number;
     unsigned int m_last_dmx_length;
+    bool m_dmx_started;
 
     void HandleMessage(uint8_t label,
                        const uint8_t *data,
