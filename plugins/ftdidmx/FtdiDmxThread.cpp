@@ -78,8 +78,9 @@ bool FtdiDmxThread::WriteDMX(const DmxBuffer &buffer) {
  * @brief The method called by the thread
  */
 void *FtdiDmxThread::Run() {
-  TimeStamp ts1, ts2, ts3;
+  TimeStamp ts1, ts2, ts3, started;
   Clock clock;
+  clock.CurrentMonotonicTime(&started);
   CheckTimeGranularity();
   DmxBuffer buffer;
 
@@ -108,7 +109,7 @@ void *FtdiDmxThread::Run() {
 
     // While the widget is down (unplugged, or its USB power dipped), try to
     // open it again every second instead of failing on the old handle forever.
-    const int64_t now_ms = ts1.AsInt() / 1000;
+    const int64_t now_ms = (ts1 - started).InMilliSeconds();
     if (m_link.ShouldReconnect(now_ms)) {
       m_interface->Reconnect();
     }
