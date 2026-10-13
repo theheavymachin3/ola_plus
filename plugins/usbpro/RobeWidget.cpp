@@ -115,9 +115,8 @@ bool RobeWidgetImpl::SendDMX(const DmxBuffer &buffer) {
     if (used > 1) {
       // The interface only starts on a short frame, so open with one channel
       // (its real value, so nothing glitches) before the full frame.
-      ok = SendMessage(CHANNEL_A_OUT,
-                       reinterpret_cast<uint8_t*>(&output_data),
-                       1 + 4);
+      uint8_t opener[1 + 4] = {output_data[0], 0, 0, 0, 0};
+      ok = SendMessage(CHANNEL_A_OUT, opener, sizeof(opener));
       m_last_dmx_length = 1;
     }
   }
