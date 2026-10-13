@@ -1,4 +1,4 @@
-import { fetchDmx, fetchServerStats, type ServerStats } from '../api';
+import { fetchDmx, fetchServerStats, fetchSystemStats, type ServerStats, type SystemStats } from '../api';
 import { startPolling } from '../poll';
 
 const POLL_MS = 2000;
@@ -6,6 +6,8 @@ const POLL_MS = 2000;
 // Server facts and a light DMX snapshot per universe, polled only while the Overview is open.
 class OverviewStore {
   stats = $state<ServerStats | null>(null);
+  /** Host health; stays null on an olad that has no /json/system_stats. */
+  host = $state<SystemStats | null>(null);
   /** False once a request to olad fails; true again when one succeeds. */
   reachable = $state(true);
   dmx = $state<Record<number, number[]>>({});
@@ -21,6 +23,11 @@ class OverviewStore {
       } catch {
         this.reachable = false;
         return;
+      }
+      try {
+        this.host = await fetchSystemStats();
+      } catch {
+        this.host = null; // older olad, or momentarily unreadable: the card just hides
       }
       const next: Record<number, number[]> = {};
       await Promise.all(

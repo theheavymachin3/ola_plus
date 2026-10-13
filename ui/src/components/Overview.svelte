@@ -11,6 +11,7 @@
   import { sceneStore } from '../lib/scenes/store.svelte';
   import { syncSummary } from '../lib/sync/summary.svelte';
   import DmxStrip from './DmxStrip.svelte';
+  import PiCard from './PiCard.svelte';
 
   let { onnavigate }: { onnavigate: (tab: Goto | 'monitor' | 'mixer') => void } = $props();
 
@@ -46,6 +47,7 @@
       plugins: pluginStore.plugins,
       sync: sync.state,
       patchLimited: patch.limited,
+      host: ov.host,
     }),
   );
   const activePlugins = $derived(pluginStore.plugins.filter((p) => p.active));
@@ -108,6 +110,8 @@
       </dl>
       <button onclick={() => onnavigate('plugins')}>Plugins</button>
     </article>
+
+    {#if ov.host}<PiCard host={ov.host} />{/if}
   </section>
 
   <section>

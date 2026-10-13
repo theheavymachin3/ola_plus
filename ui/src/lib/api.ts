@@ -215,3 +215,27 @@ export interface ServerStats {
 }
 
 export const fetchServerStats = () => getJson<ServerStats>('/json/server_stats');
+
+// --- Host health (CPU temperature, power; Raspberry Pi firmware readings when available) -----
+
+export interface SystemStats {
+  platform: 'raspberry-pi' | 'linux' | 'other';
+  model?: string;
+  cpu_temp_c?: number;
+  cpu_freq_mhz?: number;
+  cpu_max_freq_mhz?: number;
+  undervoltage_alarm?: boolean; // the kernel's alarm, set right now
+  load?: [number, number, number];
+  mem_total_kb?: number;
+  mem_available_kb?: number;
+  uptime_s?: number;
+  /** Only on a Raspberry Pi whose ola-plus-sysinfo service is running; absent when stale. */
+  firmware?: {
+    age_s: number;
+    volts: Partial<Record<'core' | 'sdram_c' | 'sdram_i' | 'sdram_p', number>>;
+    throttled?: number; // vcgencmd get_throttled bit field
+    arm_clock_hz?: number;
+  };
+}
+
+export const fetchSystemStats = () => getJson<SystemStats>('/json/system_stats');

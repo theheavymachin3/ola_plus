@@ -1,11 +1,12 @@
 // Pure summaries for the Overview page: what is on each universe and device, how busy it is,
 // and the short list of things worth the operator's attention. No I/O.
-import type { PluginSummary } from '../api';
+import type { PluginSummary, SystemStats } from '../api';
 import type { FixtureInst } from '../fixtures/model';
 import type { Group } from '../groups/model';
 import { groupByDevice, portsOf, type DeviceGroup, type Port, type Universe } from '../patchModel';
 import type { Scene } from '../scenes/model';
 import type { SyncStatus } from '../sync/docSync';
+import { hostNotices } from './health';
 
 export interface UniverseOverview {
   universe: Universe;
@@ -73,6 +74,8 @@ export interface NoticeInput {
   plugins: PluginSummary[];
   sync: SyncStatus;
   patchLimited: boolean;
+  /** Latest host readings, if this olad provides them. */
+  host?: SystemStats | null;
 }
 
 export function buildNotices(i: NoticeInput): Notice[] {
@@ -80,6 +83,7 @@ export function buildNotices(i: NoticeInput): Notice[] {
   if (!i.reachable) {
     return [{ severity: 'warn', text: 'Cannot reach olad. What is shown may be out of date.' }];
   }
+  out.push(...hostNotices(i.host));
   if (i.fixtureConflicts > 0) {
     out.push({
       severity: 'warn',

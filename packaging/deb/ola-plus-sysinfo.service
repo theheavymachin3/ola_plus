@@ -1,0 +1,22 @@
+[Unit]
+Description=OLA Plus - Raspberry Pi voltage and throttling reader
+Documentation=https://github.com/theheavymachin3/ola_plus
+# Only on a Raspberry Pi: vcgencmd comes with its firmware tools.
+ConditionPathExists=/usr/bin/vcgencmd
+
+[Service]
+# vcgencmd needs the "video" group; nothing else. olad only reads the file this writes.
+DynamicUser=yes
+SupplementaryGroups=video
+RuntimeDirectory=ola-plus
+RuntimeDirectoryMode=0755
+ExecStart=/usr/lib/ola-plus/firmware-stats.sh
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

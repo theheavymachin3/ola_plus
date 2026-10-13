@@ -110,6 +110,18 @@ http
         version: '0.10.9', build: 'mock', up_since: startedAt, quit_enabled: false,
       });
     }
+    if (path === '/json/system_stats') {
+      if (process.env.MOCK_NO_HOST) return send(res, { error: 'not found' }, 404);
+      const bad = !!process.env.MOCK_UNDERVOLT;
+      return send(res, {
+        platform: 'raspberry-pi', model: 'Raspberry Pi 3 Model B Plus Rev 1.3',
+        cpu_temp_c: bad ? 82.4 : 52.1, cpu_freq_mhz: 1400, cpu_max_freq_mhz: 1400,
+        undervoltage_alarm: bad, load: [0.52, 0.4, 0.31],
+        mem_total_kb: 942116, mem_available_kb: 612340, uptime_s: 93784,
+        firmware: { age_s: 2, volts: { core: 1.2, sdram_c: 1.2, sdram_i: 1.2, sdram_p: 1.225 },
+          throttled: bad ? 0x50005 : 0, arm_clock_hz: 1400000000 },
+      });
+    }
     if (path === '/json/universe_plugin_list') {
       return send(res, {
         plugins: plugins.map(({ id, name, active, enabled }) => ({ id, name, active, enabled })),

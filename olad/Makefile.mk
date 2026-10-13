@@ -23,6 +23,8 @@ ola_server_sources = \
     olad/PluginManager.cpp \
     olad/PluginManager.h \
     olad/RDMHTTPModule.h \
+    olad/SystemStats.cpp \
+    olad/SystemStats.h \
     olad/UiStore.cpp \
     olad/UiStore.h
 ola_server_additional_libs =
@@ -78,6 +80,7 @@ olad_olad_LDADD = olad/libolaserver.la \
 ##################################################
 test_programs += \
     olad/OlaTester \
+    olad/SystemStatsTester \
     olad/UiStoreTester
 
 COMMON_OLAD_TEST_LDADD = $(COMMON_TESTING_LIBS) $(libprotobuf_LIBS) \
@@ -90,6 +93,12 @@ olad_OlaTester_SOURCES = \
     olad/OlaServerServiceImplTest.cpp
 olad_OlaTester_CXXFLAGS = $(COMMON_TESTING_PROTOBUF_FLAGS)
 olad_OlaTester_LDADD = $(COMMON_OLAD_TEST_LDADD)
+
+olad_SystemStatsTester_SOURCES = olad/SystemStatsTest.cpp
+olad_SystemStatsTester_CXXFLAGS = $(COMMON_TESTING_FLAGS)
+olad_SystemStatsTester_LDADD = $(COMMON_TESTING_LIBS) \
+                               olad/libolaserver.la \
+                               common/libolacommon.la
 
 olad_UiStoreTester_SOURCES = olad/UiStoreTest.cpp
 olad_UiStoreTester_CXXFLAGS = $(COMMON_TESTING_FLAGS)

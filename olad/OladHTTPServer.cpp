@@ -21,6 +21,8 @@
 #include <sys/time.h>
 #include <fstream>
 #include <iostream>
+#include <map>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -40,6 +42,7 @@
 #include "olad/OladHTTPServer.h"
 #include "olad/OlaServer.h"
 #include "olad/Preferences.h"
+#include "olad/SystemStats.h"
 #include "olad/UiStore.h"
 
 namespace ola {
@@ -135,6 +138,7 @@ OladHTTPServer::OladHTTPServer(ExportMap *export_map,
   RegisterHandler("/json/get_ports", &OladHTTPServer::JsonAvailablePorts);
   RegisterHandler("/json/patch_overview",
                   &OladHTTPServer::JsonPatchOverview);
+  RegisterHandler("/json/system_stats", &OladHTTPServer::JsonSystemStats);
   RegisterHandler("/json/ui_store", &OladHTTPServer::JsonUiStore);
   RegisterHandler("/ui_store", &OladHTTPServer::SaveUiStore);
   RegisterHandler("/json/universe_info", &OladHTTPServer::JsonUniverseInfo);
@@ -666,6 +670,73 @@ int OladHTTPServer::SendJsonWithStatus(HTTPResponse *response,
   int r = response->SendJson(json);
   delete response;
   return r;
+}
+
+
+/**
+ * @brief Report the health of the machine olad runs on.
+ *
+ * Temperature, load, memory and, on a Raspberry Pi, power and throttling. Whatever
+ * the platform does not offer is left out. See SystemStats.
+ * @param request the HTTPRequest
+ * @param response the HTTPResponse
+ * @returns MHD_NO or MHD_YES
+ */
+int OladHTTPServer::JsonSystemStats(const HTTPRequest *request,
+                                    HTTPResponse *response) {
+  if (request->CheckParameterExists(HELP_PARAMETER)) {
+    return ServeUsage(response,
+                      "returns the host platform, CPU temperature, load, "
+                      "memory and, on a Raspberry Pi, voltages and throttling");
+  }
+
+  const SystemSnapshot s = SystemStats().Read(time(NULL));
+  JsonObject json;
+  json.Add("platform", s.platform);
+  if (!s.model.empty()) {
+    json.Add("model", s.model);
+  }
+  if (s.has_cpu_temp) {
+    json.Add("cpu_temp_c", s.cpu_temp_c);
+  }
+  if (s.has_cpu_freq) {
+    json.Add("cpu_freq_mhz", s.cpu_freq_mhz);
+    if (s.cpu_max_freq_mhz) {
+      json.Add("cpu_max_freq_mhz", s.cpu_max_freq_mhz);
+    }
+  }
+  if (s.has_undervoltage_alarm) {
+    json.Add("undervoltage_alarm", s.undervoltage_alarm);
+  }
+  if (s.has_load) {
+    std::ostringstream load;
+    load << "[" << s.load[0] << "," << s.load[1] << "," << s.load[2] << "]";
+    json.AddRaw("load", load.str());
+  }
+  if (s.has_mem) {
+    json.Add("mem_total_kb", static_cast<unsigned int>(s.mem_total_kb));
+    json.Add("mem_available_kb", static_cast<unsigned int>(s.mem_available_kb));
+  }
+  if (s.has_uptime) {
+    json.Add("uptime_s", static_cast<unsigned int>(s.uptime_s));
+  }
+  if (s.has_firmware) {
+    JsonObject *firmware = json.AddObject("firmware");
+    firmware->Add("age_s", s.firmware.age_s);
+    JsonObject *volts = firmware->AddObject("volts");
+    for (std::map<string, double>::const_iterator i = s.firmware.volts.begin();
+         i != s.firmware.volts.end(); ++i) {
+      volts->Add(i->first, i->second);
+    }
+    if (s.firmware.has_throttled) {
+      firmware->Add("throttled", s.firmware.throttled);
+    }
+    if (s.firmware.has_arm_clock) {
+      firmware->Add("arm_clock_hz",
+                    static_cast<unsigned int>(s.firmware.arm_clock_hz));
+    }
+  }
+  return SendJsonWithStatus(response, 200, json);
 }
 
 

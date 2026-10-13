@@ -82,6 +82,8 @@ class OladHTTPServer: public ola::http::OlaHTTPServer {
                    ola::http::HTTPResponse *response);
   int JsonPatchOverview(const ola::http::HTTPRequest *request,
                         ola::http::HTTPResponse *response);
+  int JsonSystemStats(const ola::http::HTTPRequest *request,
+                      ola::http::HTTPResponse *response);
   int JsonUiStore(const ola::http::HTTPRequest *request,
                   ola::http::HTTPResponse *response);
   int SaveUiStore(const ola::http::HTTPRequest *request,

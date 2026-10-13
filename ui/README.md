@@ -52,6 +52,14 @@ the browser, as before ("This device only" in the header).
 Scenes belong to one universe and fade linearly; fades run in the browser, so closing the page stops a fade
 where it is.
 
+The Overview has a Raspberry Pi card (CPU temperature, clock, load, memory, uptime, power state and the
+chip's voltages) and raises a notice on under-voltage, throttling or heat. It reads `/json/system_stats`; on an
+olad without it the card is simply hidden. Temperature, load and memory come from `/sys` and `/proc`. The
+voltages and throttling flags come from the firmware (`vcgencmd`), which needs the `video` group, so the .deb
+runs a separate small service, `ola-plus-sysinfo`, that writes `/run/ola-plus/firmware.txt` every 5 s and olad
+only reads that file (olad itself gets no extra rights). Readings older than 30 s are ignored. The 5 V supply
+cannot be measured by a Pi: it only reports whether it dropped too low.
+
 ## Install on a phone
 
 The UI ships a web app manifest and icons, so "Add to Home Screen" gives a full-screen app. Browsers only allow

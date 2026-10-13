@@ -32,6 +32,9 @@ configure)
     if [ -d /run/systemd/system ]; then
         systemctl daemon-reload || true
         systemctl enable olad.service > /dev/null 2>&1 || true
+        # Voltage/throttling reader; it only starts on a Raspberry Pi (it needs vcgencmd).
+        systemctl enable ola-plus-sysinfo.service > /dev/null 2>&1 || true
+        systemctl restart ola-plus-sysinfo.service > /dev/null 2>&1 || true
         systemctl restart olad.service || echo "ola-plus: olad did not start, see: journalctl -u olad" >&2
     fi
     ;;

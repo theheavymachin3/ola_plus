@@ -40,6 +40,7 @@ id -nG olad | tr ' ' '\n' | grep -qx dialout || fail "olad is not in dialout"
 
 step "installed files"
 for f in /usr/bin/olad /usr/bin/ola_dev_info /usr/lib/systemd/system/olad.service \
+         /usr/lib/systemd/system/ola-plus-sysinfo.service /usr/lib/ola-plus/firmware-stats.sh \
          /usr/lib/udev/rules.d/60-ola.rules /usr/share/olad/www/landing.html \
          /usr/share/olad/www/ui/index.html /usr/share/olad/www/ui/manifest.webmanifest; do
   [ -e "$f" ] || fail "missing $f"
@@ -75,6 +76,33 @@ echo "$out" | grep -q "stop olad.service" || fail "prerm must stop olad when the
 echo "$out" | grep -q "disable olad.service" || fail "prerm must disable olad when the package is removed"
 rm -rf /run/systemd/system /tmp/fakebin /tmp/systemctl.log
 
+step "firmware reader writes what vcgencmd says (with a fake vcgencmd)"
+mkdir -p /tmp/fakevc
+cat > /tmp/fakevc/vcgencmd <<'EOF2'
+#!/bin/sh
+case "$1 $2" in
+  "measure_volts core") echo "volt=1.2000V" ;;
+  "measure_volts sdram_c") echo "volt=1.2000V" ;;
+  "measure_volts sdram_i") echo "volt=1.2000V" ;;
+  "measure_volts sdram_p") echo "volt=1.2250V" ;;
+  "get_throttled ") echo "throttled=0x50005" ;;
+  "measure_clock arm") echo "frequency(48)=600062000" ;;
+esac
+EOF2
+chmod +x /tmp/fakevc/vcgencmd
+OLA_PLUS_FIRMWARE_FILE=/tmp/fw-test.txt OLA_PLUS_FIRMWARE_INTERVAL=1 VCGENCMD=/tmp/fakevc/vcgencmd \
+  /usr/lib/ola-plus/firmware-stats.sh &
+reader=$!
+for _ in $(seq 1 10); do [ -s /tmp/fw-test.txt ] && break; sleep 1; done
+kill "$reader" || true
+cat /tmp/fw-test.txt
+grep -qx "volts_core=1.2000" /tmp/fw-test.txt || fail "core voltage missing"
+grep -qx "volts_sdram_p=1.2250" /tmp/fw-test.txt || fail "sdram_p voltage missing"
+grep -qx "throttled=0x50005" /tmp/fw-test.txt || fail "throttled flags missing"
+grep -qx "arm_clock_hz=600062000" /tmp/fw-test.txt || fail "arm clock missing"
+grep -q "^updated=[0-9]" /tmp/fw-test.txt || fail "timestamp missing"
+rm -rf /tmp/fakevc
+
 step "run olad as the olad user with the installed defaults (no --ui-dir)"
 nohup runuser -u olad -- /usr/bin/olad --config-dir /etc/ola --log-level 3 > /tmp/olad.log 2>&1 &
 for _ in $(seq 1 90); do
@@ -83,6 +111,10 @@ for _ in $(seq 1 90); do
 done
 curl -sf http://127.0.0.1:9090/json/server_stats > /dev/null || { cat /tmp/olad.log; fail "olad did not come up"; }
 bash "$REPO/ui/ci/smoke-ui-hosting.sh" http://127.0.0.1:9090 || fail "UI hosting checks failed"
+curl -sf http://127.0.0.1:9090/json/system_stats > /tmp/system_stats.json
+cat /tmp/system_stats.json; echo
+jq -e '.platform != null and (.load | length == 3) and .mem_total_kb > 0 and .uptime_s >= 0' /tmp/system_stats.json \
+  || fail "system_stats is missing basics"
 # (Read it all: with pipefail, `| head` can end the producer early and fail the script.)
 ola_dev_info > /tmp/dev_info.txt
 sed -n '1,8p' /tmp/dev_info.txt
