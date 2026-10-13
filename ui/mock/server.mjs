@@ -41,6 +41,34 @@ const universeIds = () => [...new Set([...ports.values()].map((p) => p.universe)
 const startedAt = new Date().toString().slice(0, 24);
 const uiDocs = new Map(); // key -> { rev, data: JSON text }
 
+// --- RDM devices (what discovery would find, per universe) ------------------
+const rdmDevices = new Map([
+  [1, [
+    { uid: '7a70:00000001', manufacturer: 'Acme Lighting', label: 'Front wash L', address: 1, personality: 2,
+      modes: [['Basic', 3], ['Standard', 8], ['Extended', 16]] },
+    { uid: '7a70:00000002', manufacturer: 'Acme Lighting', label: 'Front wash R', address: 9, personality: 2,
+      modes: [['Basic', 3], ['Standard', 8], ['Extended', 16]] },
+    { uid: '4d41:0000a001', manufacturer: 'Moving Heads Co', label: '', address: 20, personality: 1,
+      modes: [['16 bit', 24], ['8 bit', 16]] },
+    { uid: '5253:0100029c', manufacturer: 'Robe', label: 'Dimmer pack', address: 24, personality: 1,
+      modes: [['Dimmer', 4]] },
+  ]],
+  [2, [
+    { uid: '7a70:00000010', manufacturer: 'Acme Lighting', label: 'Truss 1', address: 1, personality: 1,
+      modes: [['Basic', 3], ['Standard', 8]] },
+  ]],
+]);
+const rdmIdentify = new Set();
+const rdmFind = (u, uid) => (rdmDevices.get(u) ?? []).find((d) => d.uid === uid);
+const rdmSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const rdmUidList = (u) => ({
+  universe: u,
+  uids: (rdmDevices.get(u) ?? []).map((d) => ({
+    uid: d.uid, manufacturer: d.manufacturer, device: d.label,
+    manufacturer_id: parseInt(d.uid.split(':')[0], 16), device_id: parseInt(d.uid.split(':')[1], 16),
+  })),
+});
+
 // --- plugins ---------------------------------------------------------------
 const plugins = [
   [1, 'Dummy', 'Dummy device for testing.'],
@@ -121,6 +149,48 @@ http
         firmware: { age_s: 2, volts: { core: 1.2, sdram_c: 1.2, sdram_i: 1.2, sdram_p: 1.225 },
           throttled: bad ? 0x50005 : 0, arm_clock_hz: 1400000000 },
       });
+    }
+    if (path.startsWith('/json/rdm/') || path === '/rdm/run_discovery') {
+      const u = Number(q.get('id'));
+      const d = rdmFind(u, q.get('uid') ?? '');
+      await rdmSleep(path === '/rdm/run_discovery' && q.get('incremental') !== 'true' ? 1500 : 250);
+      if (path === '/rdm/run_discovery' || path === '/json/rdm/uids') return send(res, rdmUidList(u));
+      if (!d) return send(res, { error: 'RDM timeout' });
+      if (path === '/json/rdm/uid_info') {
+        return send(res, { error: '', address: d.address, footprint: d.modes[d.personality - 1][1],
+          personality: d.personality, personality_count: d.modes.length });
+      }
+      if (path === '/json/rdm/uid_identify_device') return send(res, { error: '', identify_device: rdmIdentify.has(d.uid) });
+      if (path === '/json/rdm/uid_personalities') {
+        return send(res, { error: '', selected: d.personality,
+          personalities: d.modes.map(([name, footprint], i) => ({ name, index: i + 1, footprint })) });
+      }
+      if (path === '/json/rdm/section_info' && q.get('section') === 'device_label') {
+        return send(res, { refresh: false, error: '', items: [{ description: 'Device Label', type: 'string', value: d.label, id: 'label' }] });
+      }
+      if (path === '/json/rdm/set_section_info') {
+        const section = q.get('section');
+        if (section === 'dmx_address') {
+          const a = Number(q.get('address'));
+          const fp = d.modes[d.personality - 1][1];
+          if (!(a >= 1 && a + fp - 1 <= 512)) return send(res, { error: 'NACK: data out of range' });
+          if (process.env.MOCK_RDM_FAIL && d.uid.endsWith('0002')) return send(res, { error: 'RDM timeout' });
+          d.address = a;
+          return send(res, { error: '' });
+        }
+        if (section === 'personality') {
+          const p = Number(q.get('int'));
+          if (!(p >= 1 && p <= d.modes.length)) return send(res, { error: 'NACK: data out of range' });
+          d.personality = p;
+          return send(res, { error: '' });
+        }
+        if (section === 'identify_device') {
+          if (q.get('bool') === '1') rdmIdentify.add(d.uid); else rdmIdentify.delete(d.uid);
+          return send(res, { error: '' });
+        }
+        if (section === 'device_label') { d.label = q.get('label') ?? ''; return send(res, { error: '' }); }
+      }
+      return send(res, { error: 'unsupported' });
     }
     if (path === '/json/universe_plugin_list') {
       return send(res, {
