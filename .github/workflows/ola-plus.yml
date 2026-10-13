@@ -73,11 +73,14 @@ jobs:
           ./configure --enable-unittests CC="ccache gcc" CXX="ccache g++" CPPFLAGS=-Wno-deprecated-declarations
       - name: Build olad
         run: make -j"$(nproc)"
-      - name: Static hosting unit tests
+      - name: C++ unit tests
         run: |
-          make -j"$(nproc)" common/http/StaticFilesTester olad/UiStoreTester
+          make -j"$(nproc)" common/http/StaticFilesTester olad/UiStoreTester olad/SystemStatsTester             plugins/usbpro/RobeWidgetTester plugins/ftdidmx/FtdiLinkStateTester
           ./common/http/StaticFilesTester
           ./olad/UiStoreTester
+          ./olad/SystemStatsTester
+          ./plugins/usbpro/RobeWidgetTester
+          ./plugins/ftdidmx/FtdiLinkStateTester
       - uses: actions/setup-node@v4
         with:
           node-version: 22

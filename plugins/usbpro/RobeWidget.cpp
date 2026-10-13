@@ -63,7 +63,8 @@ RobeWidgetImpl::RobeWidgetImpl(ola::io::ConnectedDescriptor *descriptor,
       m_dmx_callback(NULL),
       m_pending_request(NULL),
       m_uid(uid),
-      m_transaction_number(0) {
+      m_transaction_number(0),
+      m_last_dmx_length(0) {
 }
 
 
@@ -86,14 +87,37 @@ void RobeWidgetImpl::Stop() {
  * @param buffer the DMX data
  */
 bool RobeWidgetImpl::SendDMX(const DmxBuffer &buffer) {
-  // the data is 512 + an extra 4 bytes
+  // the data is the channels + an extra 4 bytes
   uint8_t output_data[DMX_FRAME_DATA_SIZE];
   memset(output_data, 0, DMX_FRAME_DATA_SIZE);
   unsigned int length = DMX_UNIVERSE_SIZE;
   buffer.Get(output_data, &length);
+
+  // The Robe Universal Interface does not start sending on a long frame: with
+  // 220 channels it did, with 251 or more it stayed silent until something
+  // shorter arrived (the web UI that strips trailing zeros started it at once).
+  // So send only up to the last channel that is not zero. When the frame gets
+  // shorter than the previous one, send that previous length once more first,
+  // zero padded, so the channels that dropped out are cleared and a fixture
+  // that was at full on a high channel is not left there.
+  unsigned int used = length;
+  while (used > 1 && output_data[used - 1] == 0) {
+    used--;
+  }
+  if (length == 0) {
+    used = 0;  // nothing to send but the padding
+  }
+
+  bool ok = true;
+  if (used < m_last_dmx_length) {
+    ok = SendMessage(CHANNEL_A_OUT,
+                     reinterpret_cast<uint8_t*>(&output_data),
+                     m_last_dmx_length + 4);
+  }
+  m_last_dmx_length = used;
   return SendMessage(CHANNEL_A_OUT,
                      reinterpret_cast<uint8_t*>(&output_data),
-                     length + 4);
+                     used + 4) && ok;
 }
 
 

@@ -57,6 +57,7 @@ using std::vector;
 class RobeWidgetTest: public CommonWidgetTest {
   CPPUNIT_TEST_SUITE(RobeWidgetTest);
   CPPUNIT_TEST(testSendDMX);
+  CPPUNIT_TEST(testSendDMXTrimsTrailingZeros);
   CPPUNIT_TEST(testSendRDMRequest);
   CPPUNIT_TEST(testSendRDMMute);
   CPPUNIT_TEST(testSendRDMDUB);
@@ -70,6 +71,7 @@ class RobeWidgetTest: public CommonWidgetTest {
     void setUp();
 
     void testSendDMX();
+    void testSendDMXTrimsTrailingZeros();
     void testSendRDMRequest();
     void testSendRDMMute();
     void testSendRDMDUB();
@@ -262,6 +264,47 @@ void RobeWidgetTest::ValidateBranchStatus(const uint8_t *expected_data,
 
 
 /*
+ * Long frames keep the interface silent, so only the channels up to the last
+ * non zero one are sent, and a shrinking frame clears the channels it drops.
+ */
+void RobeWidgetTest::testSendDMXTrimsTrailingZeros() {
+  // 512 channels, only the third is set: sent as 3 channels + 4 padding bytes
+  DmxBuffer buffer;
+  buffer.Blackout();
+  buffer.SetChannel(2, 9);
+  uint8_t trimmed[] = {0, 0, 9, 0, 0, 0, 0};
+  m_endpoint->AddExpectedRobeMessage(
+      DMX_FRAME_LABEL,
+      trimmed,
+      sizeof(trimmed),
+      ola::NewSingleCallback(this, &RobeWidgetTest::Terminate));
+  m_widget->SendDMX(buffer);
+  m_ss.Run();
+  m_endpoint->Verify();
+
+  // everything off: the previous length is sent once, zero padded, then a
+  // single channel (a frame is never shorter than one channel)
+  DmxBuffer off;
+  off.Blackout();
+  uint8_t cleared[] = {0, 0, 0, 0, 0, 0, 0};
+  m_endpoint->AddExpectedRobeMessage(
+      DMX_FRAME_LABEL,
+      cleared,
+      sizeof(cleared),
+      NULL);
+  uint8_t single[] = {0, 0, 0, 0, 0};
+  m_endpoint->AddExpectedRobeMessage(
+      DMX_FRAME_LABEL,
+      single,
+      sizeof(single),
+      ola::NewSingleCallback(this, &RobeWidgetTest::Terminate));
+  m_widget->SendDMX(off);
+  m_ss.Run();
+  m_endpoint->Verify();
+}
+
+
+/*
  * Check that we can send DMX
  */
 void RobeWidgetTest::testSendDMX() {
@@ -284,6 +327,15 @@ void RobeWidgetTest::testSendDMX() {
   // now test an empty frame
   DmxBuffer buffer2;
   uint8_t empty_frame_data[] = {0, 0, 0, 0};  // null frames still have 4 bytes
+
+  // the frame got shorter, so the previous length is sent once more, zeroed,
+  // to clear the channels that dropped out
+  uint8_t cleared_frame_data[] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+  m_endpoint->AddExpectedRobeMessage(
+      DMX_FRAME_LABEL,
+      cleared_frame_data,
+      sizeof(cleared_frame_data),
+      NULL);
 
   // add the expected data, run and verify.
   m_endpoint->AddExpectedRobeMessage(

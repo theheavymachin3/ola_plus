@@ -91,6 +91,7 @@ class RobeWidgetImpl: public BaseRobeWidget,
     std::auto_ptr<const ola::rdm::RDMRequest> m_pending_request;
     const ola::rdm::UID m_uid;
     uint8_t m_transaction_number;
+    unsigned int m_last_dmx_length;
 
     void HandleMessage(uint8_t label,
                        const uint8_t *data,
