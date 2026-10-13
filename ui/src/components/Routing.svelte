@@ -2,9 +2,11 @@
   import { onMount } from 'svelte';
   import { patch } from '../lib/patch.svelte';
   import DevicePorts from './DevicePorts.svelte';
+  import NewUniverseDialog from './NewUniverseDialog.svelte';
   import UniverseCard from './UniverseCard.svelte';
 
   let view = $state<'universes' | 'devices'>('universes');
+  let creating = $state(false);
 
   onMount(() => patch.watch());
 </script>
@@ -16,10 +18,16 @@
       <button class:on={view === 'devices'} onclick={() => (view = 'devices')}>By device</button>
     </div>
     <span class="spacer"></span>
-    <button onclick={() => patch.newUniverse('')}>+ Universe</button>
+    <button onclick={() => (creating = true)}>+ Universe</button>
   </div>
 
   {#if patch.error}<p class="err" role="alert">{patch.error}</p>{/if}
+  {#if patch.actionError}
+    <p class="err" role="alert">
+      <span>That did not work: {patch.actionError}</span>
+      <button class="dismiss" onclick={() => patch.dismissActionError()} aria-label="Dismiss">×</button>
+    </p>
+  {/if}
   {#if patch.limited}
     <p class="note">
       This olad lists only the first free port of devices like Art-Net or sACN; the others appear as you
@@ -41,6 +49,10 @@
     <DevicePorts />
   {/if}
 </div>
+
+{#if creating}
+  <NewUniverseDialog onclose={() => (creating = false)} />
+{/if}
 
 <style>
   .routing {
@@ -81,6 +93,14 @@
   }
   .err {
     color: var(--bad);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dismiss {
+    min-height: 28px;
+    padding: 0 10px;
+    flex: none;
   }
   .dim {
     color: var(--dim);

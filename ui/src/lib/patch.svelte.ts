@@ -9,10 +9,12 @@ import {
   modifyUniverse,
   type PriorityMode,
 } from './api';
+import { mixer } from './mixer.svelte';
 import {
   buildModel,
   buildModelFromOverview,
   nextFreeUniverse,
+  validateNewUniverse,
   type PatchModel,
   type Port,
   type Universe,
@@ -23,7 +25,10 @@ const REFRESH_MS = 3000; // USB / network devices come and go
 class PatchStore {
   universes = $state<Universe[]>([]);
   ports = $state<Port[]>([]);
+  /** Why the last refresh failed (olad unreachable). Cleared by the next good refresh. */
   error = $state('');
+  /** Why the last action (patch, create, rename…) failed. Stays until dismissed or the next action. */
+  actionError = $state('');
   loaded = $state(false);
   /** True when olad has no patch_overview, so some free ports may be missing from the list. */
   limited = $state(false);
@@ -77,16 +82,28 @@ class PatchStore {
     return nextFreeUniverse(this.universes);
   }
 
-  // Run a mutation, then re-read the truth from olad so the UI never drifts.
-  async #run(fn: () => Promise<void>) {
-    try {
-      await fn();
-      this.error = '';
-    } catch (e) {
-      this.error = e instanceof Error ? e.message : String(e);
-    }
+  dismissActionError() {
+    this.actionError = '';
+  }
+
+  // Re-read the truth from olad now, even if a refresh was already in flight, and let the
+  // mixer's universe list (which feeds the header) catch up too.
+  async #reload() {
     this.#busy = false;
     await this.refresh();
+    void mixer.refreshUniverses();
+  }
+
+  // Run a mutation, then re-read the truth from olad so the UI never drifts. A failure is kept
+  // in actionError: the refresh that follows must not wipe it, or the user never sees it.
+  async #run(fn: () => Promise<void>) {
+    this.actionError = '';
+    try {
+      await fn();
+    } catch (e) {
+      this.actionError = e instanceof Error ? e.message : String(e);
+    }
+    await this.#reload();
   }
 
   /** Patch a port to a universe (creating it if needed). Moves it if already patched elsewhere. */
@@ -112,11 +129,21 @@ class PatchStore {
     });
   }
 
-  newUniverse(name: string, portIds: string[] = []) {
-    return this.#run(async () => {
-      const id = this.nextFreeId();
-      await createUniverse(id, name || `Universe ${id}`, portIds);
-    });
+  /**
+   * Create universe `id` with the given ports (olad needs at least one). Resolves to null on
+   * success, or to the reason it failed, for the caller (a dialog) to show.
+   */
+  async create(id: number, name: string, portIds: string[]): Promise<string | null> {
+    const problem = validateNewUniverse(id, this.universes.map((u) => u.id), portIds);
+    if (problem) return problem;
+    let failure: string | null = null;
+    try {
+      await createUniverse(id, name.trim() || `Universe ${id}`, portIds);
+    } catch (e) {
+      failure = e instanceof Error ? e.message : String(e);
+    }
+    await this.#reload();
+    return failure;
   }
 
   rename(id: number, name: string) {

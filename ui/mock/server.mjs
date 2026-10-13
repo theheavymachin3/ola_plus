@@ -199,10 +199,11 @@ http
     if (path === '/new_universe' && req.method === 'POST') {
       const f = await readForm(req);
       const id = Number(f.get('id'));
-      const before = ids(f.get('add_ports')).length;
       meta.set(id, { name: f.get('name') || '', merge: 'LTP' }); // olad's default
       applyModify(id, new URLSearchParams({ add_ports: f.get('add_ports') ?? '' }));
-      const ok = before === 0 || portsOn(id, true).length + portsOn(id, false).length > 0;
+      // Like olad: a universe only exists while it has a port, so with none patched this fails.
+      const ok = portsOn(id, true).length + portsOn(id, false).length > 0;
+      if (!ok) meta.delete(id);
       return send(res, { ok, universe: id, message: ok ? '' : 'Failed to patch any ports' });
     }
     if (path === '/modify_universe' && req.method === 'POST') {

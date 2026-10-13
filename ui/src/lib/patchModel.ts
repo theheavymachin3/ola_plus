@@ -99,6 +99,25 @@ export function portsOf(ports: Port[], universe: number, isOutput: boolean): Por
   return ports.filter((p) => p.universe === universe && p.isOutput === isOutput);
 }
 
+export const MAX_UNIVERSE_ID = 99999;
+
+/**
+ * Why a new universe can't be created, or null if it can. olad only keeps a universe that has
+ * at least one port, so asking for an empty one always fails there ("Failed to patch any ports").
+ */
+export function validateNewUniverse(id: number, existingIds: number[], portIds: string[]): string | null {
+  if (!Number.isInteger(id) || id < 0 || id > MAX_UNIVERSE_ID) {
+    return `The universe number must be a whole number from 0 to ${MAX_UNIVERSE_ID}.`;
+  }
+  if (existingIds.includes(id)) {
+    return `U${id} already exists. Add ports to it from its own card.`;
+  }
+  if (portIds.length === 0) {
+    return 'Pick at least one port: olad only keeps a universe that has a port.';
+  }
+  return null;
+}
+
 // Smallest universe id >= 1 not in use.
 export function nextFreeUniverse(universes: Universe[]): number {
   const used = new Set(universes.map((u) => u.id));

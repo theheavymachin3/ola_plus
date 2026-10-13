@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { PatchOverview, RawPort, RawUniverseInfo } from './api';
-import { buildModel, buildModelFromOverview, groupByDevice, nextFreeUniverse, universeWarnings, portsOf } from './patchModel';
+import {
+  buildModel,
+  buildModelFromOverview,
+  groupByDevice,
+  nextFreeUniverse,
+  universeWarnings,
+  portsOf,
+  validateNewUniverse,
+} from './patchModel';
 
 const port = (id: string, device = 'Dev', extra: Partial<RawPort> = {}): RawPort => ({
   device,
@@ -91,6 +99,22 @@ describe('groupByDevice', () => {
     expect(g).toHaveLength(2);
     expect(g[0].inputs).toHaveLength(1);
     expect(g[0].outputs).toHaveLength(1);
+  });
+});
+
+describe('validateNewUniverse', () => {
+  it('accepts a new number with at least one port', () => {
+    expect(validateNewUniverse(3, [1, 2], ['4-O-1'])).toBeNull();
+    expect(validateNewUniverse(0, [], ['1-I-0'])).toBeNull();
+  });
+  it('refuses a universe with no port, which olad would reject', () => {
+    expect(validateNewUniverse(3, [1, 2], [])).toMatch(/at least one port/);
+  });
+  it('refuses a number that is taken', () => {
+    expect(validateNewUniverse(2, [1, 2], ['4-O-1'])).toMatch(/U2 already exists/);
+  });
+  it('refuses numbers that are not whole or out of range', () => {
+    for (const bad of [-1, 1.5, NaN, 100000]) expect(validateNewUniverse(bad, [], ['1-O-0'])).toMatch(/whole number/);
   });
 });
 

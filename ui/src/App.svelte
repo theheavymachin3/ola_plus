@@ -57,7 +57,7 @@
       {#each mixer.universes as u (u.id)}
         <option value={u.id}>U{u.id}{u.name ? ` · ${u.name}` : ''}</option>
       {/each}
-      {#if !mixer.universes.length}<option value={mixer.universe}>U{mixer.universe}</option>{/if}
+      {#if !mixer.universes.some((u) => u.id === mixer.universe)}<option value={mixer.universe}>U{mixer.universe}</option>{/if}
     </select>
     {#if tab === 'mixer'}<button onclick={() => mixer.clearAll()}>Clear</button>{/if}
     {#if tab !== 'monitor'}<button class:alert={mixer.blackout} onclick={() => mixer.toggleBlackout()}>Blackout</button>{/if}

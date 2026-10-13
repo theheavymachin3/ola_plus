@@ -4,6 +4,7 @@ import { composeOutput, SLOTS } from './scenes/model';
 const SEND_INTERVAL_MS = 40; // ~25 fps max towards olad
 const POLL_INTERVAL_MS = 750;
 const IDLE_BEFORE_POLL_MS = 1200;
+const UNIVERSE_LIST_MS = 3000; // universes appear and vanish as ports are routed
 
 // Levels are what the operator set (0-255); output = level * master, or 0 on blackout, with
 // a held bump on top. Keeping them separate means master/blackout/bumps never destroy the
@@ -32,18 +33,26 @@ class Mixer {
   }
 
   async start() {
-    await this.#refreshUniverses();
+    await this.refreshUniverses(true);
     await this.selectUniverse(this.universe);
     setInterval(() => this.#tick(), SEND_INTERVAL_MS);
     setInterval(() => this.#poll(), POLL_INTERVAL_MS);
+    setInterval(() => void this.refreshUniverses(), UNIVERSE_LIST_MS);
   }
 
-  async #refreshUniverses() {
+  /**
+   * Re-read the list of universes olad has, for the header. With `pickIfMissing` (first load)
+   * the selection moves to the first universe if the selected one doesn't exist; later refreshes
+   * never move the operator's selection.
+   */
+  async refreshUniverses(pickIfMissing = false) {
     try {
-      this.universes = (await fetchUniverseList()).universes;
+      const list = (await fetchUniverseList()).universes;
+      // Only replace the list when it changed, so the header doesn't re-render every few seconds.
+      if (JSON.stringify(list) !== JSON.stringify(this.universes)) this.universes = list;
       this.online = true;
-      if (this.universes.length && !this.universes.some((u) => u.id === this.universe)) {
-        this.universe = this.universes[0].id;
+      if (pickIfMissing && list.length && !list.some((u) => u.id === this.universe)) {
+        this.universe = list[0].id;
       }
     } catch {
       this.online = false;
