@@ -60,6 +60,13 @@ runs a separate small service, `ola-plus-sysinfo`, that writes `/run/ola-plus/fi
 only reads that file (olad itself gets no extra rights). Readings older than 30 s are ignored. The 5 V supply
 cannot be measured by a Pi: it only reports whether it dropped too low.
 
+The RDM tab finds RDM fixtures on a universe, shows which DMX channels each one uses (and flags overlaps),
+and lets you change a fixture's address, mode and label, make it flash (Identify), or lay all of them end to
+end ("Address in a row"). It uses olad's own `/rdm/run_discovery` and `/json/rdm/*` endpoints, so it works on
+stock olad too. RDM requests briefly take the DMX line, so the tab starts **off** and sends nothing until you
+switch RDM on (the choice is remembered in the browser). Requests go out one at a time, since an interface
+drops a second request that arrives while one is pending.
+
 ## Install on a phone
 
 The UI ships a web app manifest and icons, so "Add to Home Screen" gives a full-screen app. Browsers only allow

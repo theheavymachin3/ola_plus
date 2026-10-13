@@ -239,3 +239,80 @@ export interface SystemStats {
 }
 
 export const fetchSystemStats = () => getJson<SystemStats>('/json/system_stats');
+
+// --- RDM (discovery, DMX addresses, identify) ---------------------------------------------------
+// olad answers these with `error: ""` on success. They are all GET, as in olad's own UI.
+
+export interface RdmUid {
+  uid: string;
+  manufacturer: string;
+  device: string; // the device label, once olad has resolved it
+}
+
+async function rdmGet<T extends { error?: string }>(path: string, params: Record<string, string | number>): Promise<T> {
+  const q = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
+  const j = await getJson<T>(`${path}?${q}`);
+  if (j.error) throw new Error(j.error);
+  return j;
+}
+
+/** Full discovery can take a minute on a long chain; the request simply waits for it. */
+export async function rdmDiscover(universe: number, incremental: boolean): Promise<RdmUid[]> {
+  const q = new URLSearchParams({ id: String(universe), incremental: String(incremental) });
+  const j = await getJson<{ uids?: RdmUid[] }>(`/rdm/run_discovery?${q}`);
+  return j.uids ?? [];
+}
+
+export async function rdmUids(universe: number): Promise<RdmUid[]> {
+  const j = await getJson<{ uids?: RdmUid[] }>(`/json/rdm/uids?id=${universe}`);
+  return j.uids ?? [];
+}
+
+export interface RdmInfo {
+  address: number;
+  footprint: number;
+  personality: number;
+  personality_count: number;
+}
+
+export const rdmInfo = (universe: number, uid: string) =>
+  rdmGet<RdmInfo & { error?: string }>('/json/rdm/uid_info', { id: universe, uid });
+
+export async function rdmGetIdentify(universe: number, uid: string): Promise<boolean> {
+  return (await rdmGet<{ identify_device: boolean; error?: string }>('/json/rdm/uid_identify_device', { id: universe, uid }))
+    .identify_device;
+}
+
+export async function rdmGetPersonalities(
+  universe: number,
+  uid: string,
+): Promise<{ personalities: { index: number; name: string; footprint: number }[]; selected: number }> {
+  const j = await rdmGet<{
+    personalities?: { index: number; name: string; footprint: number }[];
+    selected?: number;
+    error?: string;
+  }>('/json/rdm/uid_personalities', { id: universe, uid });
+  return { personalities: j.personalities ?? [], selected: j.selected ?? 0 };
+}
+
+export async function rdmGetLabel(universe: number, uid: string): Promise<string> {
+  const j = await rdmGet<{ items?: { value?: string }[]; error?: string }>('/json/rdm/section_info', {
+    id: universe,
+    uid,
+    section: 'device_label',
+  });
+  return j.items?.[0]?.value ?? '';
+}
+
+async function rdmSet(universe: number, uid: string, section: string, field: Record<string, string | number>) {
+  await rdmGet('/json/rdm/set_section_info', { id: universe, uid, section, ...field });
+}
+
+export const rdmSetAddress = (universe: number, uid: string, address: number) =>
+  rdmSet(universe, uid, 'dmx_address', { address });
+export const rdmSetPersonality = (universe: number, uid: string, personality: number) =>
+  rdmSet(universe, uid, 'personality', { int: personality });
+export const rdmSetIdentify = (universe: number, uid: string, on: boolean) =>
+  rdmSet(universe, uid, 'identify_device', { bool: on ? 1 : 0 });
+export const rdmSetLabel = (universe: number, uid: string, label: string) =>
+  rdmSet(universe, uid, 'device_label', { label });
