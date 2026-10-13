@@ -233,10 +233,24 @@ class FtdiInterface {
   /** @brief Setup device for DMX Output **/
   bool SetupOutput();
 
+  /**
+   * @brief Close and open the widget again, e.g. after it was replugged.
+   *
+   * Quiet on failure (it may simply not be back yet): returns false and logs only
+   * at debug level.
+   */
+  bool Reconnect();
+
+  /** @brief Choose whether a failed Write/SetBreak is logged. */
+  void SetLogErrors(bool log) { m_log_errors = log; }
+
  private:
   const FtdiWidget * m_parent;
   struct ftdi_context m_handle;
   const ftdi_interface m_interface;
+  bool m_log_errors;
+
+  bool ConfigureOutput();
 };  // FtdiInterface
 }  // namespace ftdidmx
 }  // namespace plugin

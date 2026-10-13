@@ -106,27 +106,42 @@ void *FtdiDmxThread::Run() {
 
     clock.CurrentMonotonicTime(&ts1);
 
-    if (!m_interface->SetBreak(true)) {
-      goto framesleep;
+    // While the widget is down (unplugged, or its USB power dipped), try to
+    // open it again every second instead of failing on the old handle forever.
+    const int64_t now_ms = ts1.AsInt() / 1000;
+    if (m_link.ShouldReconnect(now_ms)) {
+      m_interface->Reconnect();
     }
 
-    if (m_granularity == GOOD) {
-      usleep(DMX_BREAK);
+    {
+      bool ok = m_interface->SetBreak(true);
+      if (ok && m_granularity == GOOD) {
+        usleep(DMX_BREAK);
+      }
+      ok = ok && m_interface->SetBreak(false);
+      if (ok && m_granularity == GOOD) {
+        usleep(DMX_MAB);
+      }
+      ok = ok && m_interface->Write(buffer);
+
+      switch (m_link.FrameResult(ok, now_ms)) {
+        case FtdiLinkState::LOST:
+          // The failed call above has already logged why. Say it once, then
+          // stay quiet: a vanished widget used to fill the log with thousands
+          // of lines a minute.
+          OLA_WARN << "Lost the FTDI widget; DMX output is paused. "
+                   << "Retrying every second.";
+          m_interface->SetLogErrors(false);
+          break;
+        case FtdiLinkState::RECOVERED:
+          OLA_INFO << "The FTDI widget answers again; DMX output resumed.";
+          m_interface->SetLogErrors(true);
+          break;
+        case FtdiLinkState::NONE:
+          break;
+      }
     }
 
-    if (!m_interface->SetBreak(false)) {
-      goto framesleep;
-    }
-
-    if (m_granularity == GOOD) {
-      usleep(DMX_MAB);
-    }
-
-    if (!m_interface->Write(buffer)) {
-      goto framesleep;
-    }
-
-  framesleep:
     // Sleep for the remainder of the DMX frame time
     clock.CurrentMonotonicTime(&ts2);
     TimeInterval elapsed = ts2 - ts1;

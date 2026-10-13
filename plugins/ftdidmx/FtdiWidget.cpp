@@ -214,7 +214,8 @@ void FtdiWidget::Widgets(vector<FtdiWidgetInfo> *widgets) {
 FtdiInterface::FtdiInterface(const FtdiWidget * parent,
                              const ftdi_interface interface)
       : m_parent(parent),
-        m_interface(interface) {
+        m_interface(interface),
+        m_log_errors(true) {
   memset(&m_handle, '\0', sizeof(struct ftdi_context));
   ftdi_init(&m_handle);
 }
@@ -342,8 +343,10 @@ bool FtdiInterface::PurgeBuffers() {
 bool FtdiInterface::SetBreak(bool on) {
   if (ftdi_set_line_property2(&m_handle, BITS_8, STOP_BIT_2, NONE,
                               (on ? BREAK_ON : BREAK_OFF)) < 0) {
-    OLA_WARN << m_parent->Description() << " "
-             << ftdi_get_error_string(&m_handle);
+    if (m_log_errors) {
+      OLA_WARN << m_parent->Description() << " "
+               << ftdi_get_error_string(&m_handle);
+    }
     return false;
   } else {
     return true;
@@ -358,8 +361,10 @@ bool FtdiInterface::Write(const ola::DmxBuffer& data) {
   data.Get(buffer + 1, &length);
 
   if (ftdi_write_data(&m_handle, buffer, length + 1) < 0) {
-    OLA_WARN << m_parent->Description() << " "
-             << ftdi_get_error_string(&m_handle);
+    if (m_log_errors) {
+      OLA_WARN << m_parent->Description() << " "
+               << ftdi_get_error_string(&m_handle);
+    }
     return false;
   } else {
     return true;
@@ -389,6 +394,36 @@ bool FtdiInterface::SetupOutput() {
     return false;
   }
 
+  return ConfigureOutput();
+}
+
+bool FtdiInterface::Reconnect() {
+  if (IsOpen()) {
+    ftdi_usb_close(&m_handle);  // The widget may be gone: nothing to report.
+  }
+  if (ftdi_set_interface(&m_handle, m_interface) < 0) {
+    return false;
+  }
+  const bool by_serial = !m_parent->Serial().empty();
+  const int r = by_serial ?
+      ftdi_usb_open_desc(&m_handle, m_parent->Vid(), m_parent->Pid(),
+                         m_parent->Name().c_str(), m_parent->Serial().c_str()) :
+      ftdi_usb_open(&m_handle, m_parent->Vid(), m_parent->Pid());
+  if (r < 0) {
+    OLA_DEBUG << m_parent->Description() << " is not back yet: "
+              << ftdi_get_error_string(&m_handle);
+    return false;
+  }
+  if (!ConfigureOutput()) {
+    ftdi_usb_close(&m_handle);
+    return false;
+  }
+  OLA_INFO << m_parent->Description() << " opened again";
+  return true;
+}
+
+// The steps after the widget is open: 250 kbaud 8N2 line settings for DMX.
+bool FtdiInterface::ConfigureOutput() {
   if (!Reset()) {
     OLA_WARN << "Error Resetting widget";
     return false;

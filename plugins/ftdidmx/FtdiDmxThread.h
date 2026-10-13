@@ -28,6 +28,7 @@
 
 #include "ola/DmxBuffer.h"
 #include "ola/thread/Thread.h"
+#include "plugins/ftdidmx/FtdiLinkState.h"
 
 namespace ola {
 namespace plugin {
@@ -49,6 +50,7 @@ class FtdiDmxThread : public ola::thread::Thread {
     FtdiInterface *m_interface;
     bool m_term;
     unsigned int m_frequency;
+    FtdiLinkState m_link;
     DmxBuffer m_buffer;
     ola::thread::Mutex m_term_mutex;
     ola::thread::Mutex m_buffer_mutex;

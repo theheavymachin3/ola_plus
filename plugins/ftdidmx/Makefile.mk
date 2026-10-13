@@ -18,6 +18,7 @@ plugins_ftdidmx_libolaftdidmx_la_SOURCES = \
     plugins/ftdidmx/FtdiDmxPort.h \
     plugins/ftdidmx/FtdiDmxThread.cpp \
     plugins/ftdidmx/FtdiDmxThread.h \
+    plugins/ftdidmx/FtdiLinkState.h \
     plugins/ftdidmx/FtdiWidget.cpp \
     plugins/ftdidmx/FtdiWidget.h
 plugins_ftdidmx_libolaftdidmx_la_LIBADD = \
@@ -28,6 +29,15 @@ plugins_ftdidmx_libolaftdidmx_la_LIBADD += $(libftdi1_LIBS)
 else
 plugins_ftdidmx_libolaftdidmx_la_LIBADD += $(libftdi0_LIBS)
 endif
+
+# TESTS
+##################################################
+test_programs += plugins/ftdidmx/FtdiLinkStateTester
+
+plugins_ftdidmx_FtdiLinkStateTester_SOURCES = \
+    plugins/ftdidmx/FtdiLinkStateTest.cpp
+plugins_ftdidmx_FtdiLinkStateTester_CXXFLAGS = $(COMMON_TESTING_FLAGS)
+plugins_ftdidmx_FtdiLinkStateTester_LDADD = $(COMMON_TESTING_LIBS)
 
 endif
 
