@@ -13,7 +13,10 @@ VCGENCMD=${VCGENCMD:-vcgencmd}
 
 umask 022
 tmp="$OUT.$$"
-trap 'rm -f "$tmp"' EXIT INT TERM
+trap 'rm -f "$tmp"' EXIT
+# A trap on TERM alone would run and then carry on with the loop, so systemd would wait
+# 90 s for the stop; exit instead (the EXIT trap above still removes the temporary file).
+trap 'exit 0' INT TERM
 
 # "volt=1.2000V" -> 1.2000
 volts() {
