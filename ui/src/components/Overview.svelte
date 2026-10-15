@@ -11,6 +11,7 @@
   import { sceneStore } from '../lib/scenes/store.svelte';
   import { syncSummary } from '../lib/sync/summary.svelte';
   import DmxStrip from './DmxStrip.svelte';
+  import NetworkStatus from './NetworkStatus.svelte';
   import PiCard from './PiCard.svelte';
 
   let { onnavigate }: { onnavigate: (tab: Goto | 'monitor' | 'mixer') => void } = $props();
@@ -85,6 +86,7 @@
           <dt>Version</dt><dd>OLA {ov.stats.version}{ov.stats.build ? ` (${ov.stats.build})` : ''}</dd>
           <dt>Running since</dt><dd>{ov.stats.up_since}</dd>
         </dl>
+        {#if ov.host}<NetworkStatus host={ov.host} />{/if}
       {:else}
         <p class="muted">{ov.reachable ? 'Loading…' : 'Not reachable'}</p>
       {/if}

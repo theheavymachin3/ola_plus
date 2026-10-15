@@ -241,7 +241,10 @@ export interface SystemStats {
     enabled: boolean;
     hard_blocked: boolean; // a physical switch holds it off
     controllable: boolean; // the ola-plus-net service is there to switch it
+    connected?: boolean; // a Wi-Fi interface has its link up
   };
+  /** Only on a machine with a wired interface. */
+  ethernet?: { connected: boolean };
 }
 
 export const fetchSystemStats = () => getJson<SystemStats>('/json/system_stats');

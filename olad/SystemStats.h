@@ -58,8 +58,11 @@ struct WifiState {
   bool enabled;       /**< Neither software- nor hardware-blocked. */
   bool hard_blocked;  /**< A physical switch holds it off; software can't change that. */
   bool controllable;  /**< The ola-plus-net service is running and can switch it. */
+  bool connected;     /**< A Wi-Fi interface has its link up (associated to a network). */
 
-  WifiState() : enabled(false), hard_blocked(false), controllable(false) {}
+  WifiState()
+      : enabled(false), hard_blocked(false), controllable(false),
+        connected(false) {}
 };
 
 /** @brief One Wi-Fi network in range, as the ola-plus-net service listed it. */
@@ -114,13 +117,16 @@ struct SystemSnapshot {
   FirmwareReadings firmware;
   bool has_wifi;  /**< The machine has a Wi-Fi radio. */
   WifiState wifi;
+  bool has_ethernet;  /**< The machine has a wired network interface. */
+  bool ethernet_up;   /**< ...and one of them has its link up (cable in, partner answering). */
 
   SystemSnapshot()
       : has_cpu_temp(false), cpu_temp_c(0), has_cpu_freq(false),
         cpu_freq_mhz(0), cpu_max_freq_mhz(0), has_undervoltage_alarm(false),
         undervoltage_alarm(false), has_load(false), has_mem(false),
         mem_total_kb(0), mem_available_kb(0), has_uptime(false), uptime_s(0),
-        has_firmware(false), has_wifi(false) {
+        has_firmware(false), has_wifi(false), has_ethernet(false),
+        ethernet_up(false) {
     load[0] = load[1] = load[2] = 0;
   }
 };
@@ -173,6 +179,8 @@ class SystemStats {
                            unsigned long *available_kb);
   static bool ParseUptime(const std::string &text, unsigned long *seconds);
   /** @brief "1" -> true, "0" -> false (rfkill's soft and hard files). */
+  /** @brief The kernel's /sys/class/net/<if>/operstate: "up" -> true; "down", "dormant"... -> false. */
+  static bool ParseOperstate(const std::string &text, bool *up);
   static bool ParseRfkillFlag(const std::string &text, bool *blocked);
   static bool ParseWifiNetworks(const std::string &text, time_t now,
                                 WifiScan *out);

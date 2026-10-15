@@ -186,7 +186,8 @@ http
         cpu_temp_c: bad ? 82.4 : 52.1, cpu_freq_mhz: 1400, cpu_max_freq_mhz: 1400,
         undervoltage_alarm: bad, load: [0.52, 0.4, 0.31],
         mem_total_kb: 942116, mem_available_kb: 612340, uptime_s: 93784,
-        wifi: { enabled: mockWifi, hard_blocked: false, controllable: true },
+        wifi: { enabled: mockWifi, hard_blocked: false, controllable: true, connected: mockWifi },
+        ...(process.env.MOCK_NO_ETH === 'off' ? {} : { ethernet: { connected: process.env.MOCK_NO_ETH !== '1' } }),
         firmware: { age_s: 2, volts: { core: 1.2, sdram_c: 1.2, sdram_i: 1.2, sdram_p: 1.225 },
           throttled: bad ? 0x50005 : 0, arm_clock_hz: 1400000000 },
       });

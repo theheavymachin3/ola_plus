@@ -146,6 +146,15 @@ bool SystemStats::ParseUptime(const string &text, unsigned long *seconds) {
   return true;
 }
 
+bool SystemStats::ParseOperstate(const string &text, bool *up) {
+  const string t = Trim(text);
+  if (t.empty()) {
+    return false;
+  }
+  *up = t == "up";
+  return true;
+}
+
 bool SystemStats::ParseRfkillFlag(const string &text, bool *blocked) {
   const string t = Trim(text);
   if (t != "0" && t != "1") {
@@ -368,6 +377,31 @@ SystemSnapshot SystemStats::Read(time_t now) const {
         s.wifi.controllable =
             ola::file::ListDirectory(m_root + WIFI_REQUEST_DIR, &requests);
         break;
+      }
+    }
+  }
+
+  // Link state of the network interfaces. Wireless ones have a "wireless" directory; a wired
+  // one is any other interface backed by a device (that leaves out lo, bridges, docker, VPNs).
+  vector<string> nets;
+  if (ola::file::ListDirectory(m_root + "/sys/class/net", &nets)) {
+    for (vector<string>::const_iterator i = nets.begin(); i != nets.end();
+         ++i) {
+      const string name = ola::file::FilenameFromPath(*i);
+      const string dir = "/sys/class/net/" + name;
+      vector<string> probe;
+      bool up = false;
+      const bool has_state =
+          ReadFile(dir + "/operstate", &text) && ParseOperstate(text, &up);
+      if (ola::file::ListDirectory(m_root + dir + "/wireless", &probe)) {
+        if (has_state && up) {
+          s.wifi.connected = true;
+        }
+      } else if (ola::file::ListDirectory(m_root + dir + "/device", &probe)) {
+        s.has_ethernet = true;
+        if (has_state && up) {
+          s.ethernet_up = true;
+        }
       }
     }
   }

@@ -38,6 +38,7 @@ class SystemStatsTest: public CppUnit::TestFixture {
   CPPUNIT_TEST(testFirmware);
   CPPUNIT_TEST(testFirmwareTooOld);
   CPPUNIT_TEST(testRfkillFlag);
+  CPPUNIT_TEST(testOperstate);
   CPPUNIT_TEST(testWifiNetworks);
   CPPUNIT_TEST(testWifiResult);
   CPPUNIT_TEST(testMissingRoot);
@@ -51,6 +52,7 @@ class SystemStatsTest: public CppUnit::TestFixture {
   void testFirmware();
   void testFirmwareTooOld();
   void testRfkillFlag();
+  void testOperstate();
   void testWifiNetworks();
   void testWifiResult();
   void testMissingRoot();
@@ -66,6 +68,17 @@ void SystemStatsTest::testRfkillFlag() {
   OLA_ASSERT_FALSE(blocked);
   OLA_ASSERT_FALSE(SystemStats::ParseRfkillFlag("", &blocked));
   OLA_ASSERT_FALSE(SystemStats::ParseRfkillFlag("2", &blocked));
+}
+
+void SystemStatsTest::testOperstate() {
+  bool up = false;
+  OLA_ASSERT_TRUE(SystemStats::ParseOperstate("up\n", &up));
+  OLA_ASSERT_TRUE(up);
+  OLA_ASSERT_TRUE(SystemStats::ParseOperstate("down\n", &up));
+  OLA_ASSERT_FALSE(up);
+  OLA_ASSERT_TRUE(SystemStats::ParseOperstate("dormant\n", &up));
+  OLA_ASSERT_FALSE(up);
+  OLA_ASSERT_FALSE(SystemStats::ParseOperstate("", &up));
 }
 
 void SystemStatsTest::testWifiNetworks() {
@@ -192,4 +205,5 @@ void SystemStatsTest::testMissingRoot() {
   OLA_ASSERT_FALSE(s.has_mem);
   OLA_ASSERT_FALSE(s.has_undervoltage_alarm);
   OLA_ASSERT_FALSE(s.has_wifi);
+  OLA_ASSERT_FALSE(s.has_ethernet);
 }

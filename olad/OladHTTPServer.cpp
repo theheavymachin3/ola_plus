@@ -745,6 +745,11 @@ int OladHTTPServer::JsonSystemStats(const HTTPRequest *request,
     wifi->Add("enabled", s.wifi.enabled);
     wifi->Add("hard_blocked", s.wifi.hard_blocked);
     wifi->Add("controllable", s.wifi.controllable);
+    wifi->Add("connected", s.wifi.connected);
+  }
+  if (s.has_ethernet) {
+    JsonObject *ethernet = json.AddObject("ethernet");
+    ethernet->Add("connected", s.ethernet_up);
   }
   return SendJsonWithStatus(response, 200, json);
 }
