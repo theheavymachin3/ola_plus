@@ -38,6 +38,14 @@ const buf = (u) => dmx.get(u) ?? dmx.set(u, new Array(512).fill(0)).get(u);
 const portsOn = (u, out) => [...ports.values()].filter((p) => p.universe === u && p.is_output === out);
 const universeIds = () => [...new Set([...ports.values()].map((p) => p.universe).filter((u) => u !== null))].sort((a, b) => a - b);
 
+let mockWifi = true;
+let mockScanAt = 0;
+let mockConnect = null;
+let mockCurrent = 'Home Net';
+const mockNets = [
+  ['Home Net', 78, 'WPA2'], ['Stage Wifi', 55, 'WPA2 WPA3'], ['Stage Wifi', 40, 'WPA2 WPA3'],
+  ['Venue Guest', 30, '--'], ['Corp', 20, 'WPA2 802.1X'], ['Cafe ☕', 12, 'WPA3'],
+];
 const startedAt = new Date().toString().slice(0, 24);
 const uiDocs = new Map(); // key -> { rev, data: JSON text }
 
@@ -138,6 +146,38 @@ http
         version: '0.10.9', build: 'mock', up_since: startedAt, quit_enabled: false,
       });
     }
+    if (path === '/json/wifi' && req.method === 'POST') {
+      const f = await readForm(req);
+      const st = f.get('state');
+      if (st !== 'on' && st !== 'off') return send(res, { error: 'state must be on or off' }, 400);
+      setTimeout(() => (mockWifi = st === 'on'), 1200); // the real switch takes a moment too
+      return send(res, { requested: st });
+    }
+    if (path === '/json/wifi_scan' && req.method === 'POST') {
+      mockScanAt = Date.now() + 1500;
+      return send(res, { requested: 'scan' });
+    }
+    if (path === '/json/wifi_networks') {
+      const age = mockScanAt && Date.now() >= mockScanAt ? Math.floor((Date.now() - mockScanAt) / 1000) : undefined;
+      const out = { networks: age === undefined ? [] : mockNets.map(([ssid, signal, security]) => ({ ssid, signal, security, in_use: ssid === mockCurrent })) };
+      if (age !== undefined) out.scan_age_s = age;
+      if (mockConnect) out.connect = { ...mockConnect, age_s: Math.floor((Date.now() - mockConnect.at) / 1000) };
+      return send(res, out);
+    }
+    if (path === '/json/wifi_connect' && req.method === 'POST') {
+      const f = await readForm(req);
+      const ssid = f.get('ssid') ?? '';
+      const pw = f.get('password') ?? '';
+      if (!ssid) return send(res, { error: 'the network name must be 1 to 32 characters' }, 400);
+      if (pw && (pw.length < 8 || pw.length > 63)) return send(res, { error: 'a Wi-Fi password is 8 to 63 characters' }, 400);
+      mockConnect = { status: 'connecting', ssid, message: '', at: Date.now() };
+      setTimeout(() => {
+        const ok = pw !== 'wrongpass1';
+        mockConnect = { status: ok ? 'ok' : 'failed', ssid, message: ok ? 'Connected' : 'Error: Connection activation failed: Secrets were required, but not provided.', at: Date.now() };
+        if (ok) mockCurrent = ssid;
+      }, 2500);
+      return send(res, { requested: 'connect' });
+    }
     if (path === '/json/system_stats') {
       if (process.env.MOCK_NO_HOST) return send(res, { error: 'not found' }, 404);
       const bad = !!process.env.MOCK_UNDERVOLT;
@@ -146,6 +186,7 @@ http
         cpu_temp_c: bad ? 82.4 : 52.1, cpu_freq_mhz: 1400, cpu_max_freq_mhz: 1400,
         undervoltage_alarm: bad, load: [0.52, 0.4, 0.31],
         mem_total_kb: 942116, mem_available_kb: 612340, uptime_s: 93784,
+        wifi: { enabled: mockWifi, hard_blocked: false, controllable: true },
         firmware: { age_s: 2, volts: { core: 1.2, sdram_c: 1.2, sdram_i: 1.2, sdram_p: 1.225 },
           throttled: bad ? 0x50005 : 0, arm_clock_hz: 1400000000 },
       });

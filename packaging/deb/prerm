@@ -12,9 +12,11 @@ remove | deconfigure)
     if [ -d /run/systemd/system ]; then
         systemctl stop olad.service || true
         systemctl stop ola-plus-sysinfo.service > /dev/null 2>&1 || true
+        systemctl stop ola-plus-net.service > /dev/null 2>&1 || true
         if [ "$1" = "remove" ]; then
             systemctl disable olad.service > /dev/null 2>&1 || true
             systemctl disable ola-plus-sysinfo.service > /dev/null 2>&1 || true
+            systemctl disable ola-plus-net.service > /dev/null 2>&1 || true
         fi
     fi
     ;;

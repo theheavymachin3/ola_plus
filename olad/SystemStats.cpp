@@ -20,6 +20,11 @@
 #include "olad/SystemStats.h"
 
 #include <errno.h>
+#ifndef _WIN32
+#include <fcntl.h>
+#include <unistd.h>
+#endif  // _WIN32
+#include <stdio.h>
 #include <stdlib.h>
 #include <ola/file/Util.h>
 
@@ -34,6 +39,8 @@ using std::string;
 using std::vector;
 
 const char SystemStats::FIRMWARE_FILE[] = "/run/ola-plus/firmware.txt";
+const char SystemStats::WIFI_REQUEST_DIR[] = "/run/ola-plus-net/request";
+const char SystemStats::WIFI_STATE_DIR[] = "/run/ola-plus-net";
 
 namespace {
 
@@ -136,6 +143,99 @@ bool SystemStats::ParseUptime(const string &text, unsigned long *seconds) {
     return false;
   }
   *seconds = static_cast<unsigned long>(s);
+  return true;
+}
+
+bool SystemStats::ParseRfkillFlag(const string &text, bool *blocked) {
+  const string t = Trim(text);
+  if (t != "0" && t != "1") {
+    return false;
+  }
+  *blocked = t == "1";
+  return true;
+}
+
+bool SystemStats::ParseWifiNetworks(const string &text, time_t now,
+                                    WifiScan *out) {
+  WifiScan r = *out;
+  r.networks.clear();
+  bool have_updated = false;
+  unsigned long updated = 0;
+
+  std::istringstream in(text);
+  string line;
+  while (std::getline(in, line)) {
+    if (line.compare(0, 8, "updated=") == 0) {
+      have_updated = ToULong(Trim(line.substr(8)), 10, &updated);
+      continue;
+    }
+    // "net<TAB>in_use<TAB>signal<TAB>security<TAB>ssid"; the SSID is the rest of the line.
+    vector<string> f;
+    string::size_type start = 0;
+    for (int i = 0; i < 4; i++) {
+      string::size_type tab = line.find('\t', start);
+      if (tab == string::npos) {
+        break;
+      }
+      f.push_back(line.substr(start, tab - start));
+      start = tab + 1;
+    }
+    unsigned long in_use, signal;
+    if (f.size() != 4 || f[0] != "net" || !ToULong(f[1], 10, &in_use) ||
+        !ToULong(f[2], 10, &signal) || start >= line.size()) {
+      continue;
+    }
+    WifiNetwork n;
+    n.in_use = in_use != 0;
+    n.signal = signal > 100 ? 100 : static_cast<unsigned int>(signal);
+    n.security = f[3];
+    n.ssid = line.substr(start);
+    r.networks.push_back(n);
+  }
+  if (!have_updated) {
+    return false;
+  }
+  const long age = static_cast<long>(now) - static_cast<long>(updated);
+  r.has_scan = true;
+  r.scan_age_s = age < 0 ? 0 : static_cast<unsigned int>(age);
+  *out = r;
+  return true;
+}
+
+bool SystemStats::ParseWifiResult(const string &text, time_t now,
+                                  WifiScan *out) {
+  string status, ssid, message;
+  bool have_time = false;
+  unsigned long when = 0;
+  std::istringstream in(text);
+  string line;
+  while (std::getline(in, line)) {
+    string::size_type eq = line.find('=');
+    if (eq == string::npos) {
+      continue;
+    }
+    const string key = line.substr(0, eq);
+    const string value = line.substr(eq + 1);
+    if (key == "time") {
+      have_time = ToULong(Trim(value), 10, &when);
+    } else if (key == "status") {
+      status = Trim(value);
+    } else if (key == "ssid") {
+      ssid = value;
+    } else if (key == "message") {
+      message = value;
+    }
+  }
+  if (!have_time ||
+      (status != "connecting" && status != "ok" && status != "failed")) {
+    return false;
+  }
+  const long age = static_cast<long>(now) - static_cast<long>(when);
+  out->has_result = true;
+  out->result_age_s = age < 0 ? 0 : static_cast<unsigned int>(age);
+  out->status = status;
+  out->ssid = ssid;
+  out->message = message;
   return true;
 }
 
@@ -250,6 +350,86 @@ SystemSnapshot SystemStats::Read(time_t now) const {
   if (ReadFile(FIRMWARE_FILE, &text)) {
     s.has_firmware = ParseFirmware(text, now, &s.firmware);
   }
+
+  // Wi-Fi: the first rfkill device of type "wlan".
+  vector<string> rfkills;
+  if (ola::file::ListDirectory(m_root + "/sys/class/rfkill", &rfkills)) {
+    for (vector<string>::const_iterator i = rfkills.begin();
+         i != rfkills.end(); ++i) {
+      const string dir = "/sys/class/rfkill/" + ola::file::FilenameFromPath(*i);
+      bool soft, hard;
+      if (ReadFile(dir + "/type", &text) && Trim(text) == "wlan" &&
+          ReadFile(dir + "/soft", &text) && ParseRfkillFlag(text, &soft) &&
+          ReadFile(dir + "/hard", &text) && ParseRfkillFlag(text, &hard)) {
+        s.has_wifi = true;
+        s.wifi.hard_blocked = hard;
+        s.wifi.enabled = !soft && !hard;
+        vector<string> requests;
+        s.wifi.controllable =
+            ola::file::ListDirectory(m_root + WIFI_REQUEST_DIR, &requests);
+        break;
+      }
+    }
+  }
   return s;
+}
+
+bool SystemStats::WriteRequest(const string &name,
+                               const string &content) const {
+#ifdef _WIN32
+  return false;
+#else
+  // Created with mode 0600 from the start (a password may be in it) under a temporary
+  // name, then renamed, so the service never reads half a request.
+  const string path = m_root + WIFI_REQUEST_DIR + "/" + name;
+  const string tmp = path + ".tmp";
+  unlink(tmp.c_str());
+  int fd = open(tmp.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600);
+  if (fd < 0) {
+    return false;
+  }
+  size_t done = 0;
+  while (done < content.size()) {
+    ssize_t n = write(fd, content.data() + done, content.size() - done);
+    if (n <= 0) {
+      close(fd);
+      unlink(tmp.c_str());
+      return false;
+    }
+    done += n;
+  }
+  close(fd);
+  if (rename(tmp.c_str(), path.c_str()) != 0) {
+    unlink(tmp.c_str());
+    return false;
+  }
+  return true;
+#endif  // _WIN32
+}
+
+bool SystemStats::RequestWifi(bool on) const {
+  return WriteRequest("wifi", on ? "on\n" : "off\n");
+}
+
+bool SystemStats::RequestWifiScan() const {
+  return WriteRequest("scan", "scan\n");
+}
+
+bool SystemStats::RequestWifiConnect(const string &ssid, const string &password,
+                                     bool hidden) const {
+  return WriteRequest("connect",
+                      ssid + "\n" + password + "\n" + (hidden ? "hidden" : "") + "\n");
+}
+
+WifiScan SystemStats::ReadWifiScan(time_t now) const {
+  WifiScan scan;
+  string text;
+  if (ReadFile(string(WIFI_STATE_DIR) + "/networks.txt", &text)) {
+    ParseWifiNetworks(text, now, &scan);
+  }
+  if (ReadFile(string(WIFI_STATE_DIR) + "/connect.txt", &text)) {
+    ParseWifiResult(text, now, &scan);
+  }
+  return scan;
 }
 }  // namespace ola

@@ -35,6 +35,9 @@ configure)
         # Voltage/throttling reader; it only starts on a Raspberry Pi (it needs vcgencmd).
         systemctl enable ola-plus-sysinfo.service > /dev/null 2>&1 || true
         systemctl restart ola-plus-sysinfo.service > /dev/null 2>&1 || true
+        # Wi-Fi on/off switch for the web UI; it only starts where /dev/rfkill exists.
+        systemctl enable ola-plus-net.service > /dev/null 2>&1 || true
+        systemctl restart ola-plus-net.service > /dev/null 2>&1 || true
         systemctl restart olad.service || echo "ola-plus: olad did not start, see: journalctl -u olad" >&2
     fi
     ;;

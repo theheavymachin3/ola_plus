@@ -84,6 +84,14 @@ class OladHTTPServer: public ola::http::OlaHTTPServer {
                         ola::http::HTTPResponse *response);
   int JsonSystemStats(const ola::http::HTTPRequest *request,
                       ola::http::HTTPResponse *response);
+  int JsonWifi(const ola::http::HTTPRequest *request,
+               ola::http::HTTPResponse *response);
+  int JsonWifiNetworks(const ola::http::HTTPRequest *request,
+                       ola::http::HTTPResponse *response);
+  int JsonWifiScan(const ola::http::HTTPRequest *request,
+                   ola::http::HTTPResponse *response);
+  int JsonWifiConnect(const ola::http::HTTPRequest *request,
+                      ola::http::HTTPResponse *response);
   int JsonUiStore(const ola::http::HTTPRequest *request,
                   ola::http::HTTPResponse *response);
   int SaveUiStore(const ola::http::HTTPRequest *request,

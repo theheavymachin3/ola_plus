@@ -139,6 +139,10 @@ OladHTTPServer::OladHTTPServer(ExportMap *export_map,
   RegisterHandler("/json/patch_overview",
                   &OladHTTPServer::JsonPatchOverview);
   RegisterHandler("/json/system_stats", &OladHTTPServer::JsonSystemStats);
+  RegisterHandler("/json/wifi", &OladHTTPServer::JsonWifi);
+  RegisterHandler("/json/wifi_networks", &OladHTTPServer::JsonWifiNetworks);
+  RegisterHandler("/json/wifi_scan", &OladHTTPServer::JsonWifiScan);
+  RegisterHandler("/json/wifi_connect", &OladHTTPServer::JsonWifiConnect);
   RegisterHandler("/json/ui_store", &OladHTTPServer::JsonUiStore);
   RegisterHandler("/ui_store", &OladHTTPServer::SaveUiStore);
   RegisterHandler("/json/universe_info", &OladHTTPServer::JsonUniverseInfo);
@@ -736,6 +740,166 @@ int OladHTTPServer::JsonSystemStats(const HTTPRequest *request,
                     static_cast<unsigned int>(s.firmware.arm_clock_hz));
     }
   }
+  if (s.has_wifi) {
+    JsonObject *wifi = json.AddObject("wifi");
+    wifi->Add("enabled", s.wifi.enabled);
+    wifi->Add("hard_blocked", s.wifi.hard_blocked);
+    wifi->Add("controllable", s.wifi.controllable);
+  }
+  return SendJsonWithStatus(response, 200, json);
+}
+
+
+/**
+ * @brief Switch the Wi-Fi radio on or off.
+ *
+ * olad can't do this itself; it asks the ola-plus-net service, which runs
+ * as root. See SystemStats::RequestWifi.
+ * @param request the HTTPRequest
+ * @param response the HTTPResponse
+ * @returns MHD_NO or MHD_YES
+ */
+int OladHTTPServer::JsonWifi(const HTTPRequest *request,
+                             HTTPResponse *response) {
+  if (request->CheckParameterExists(HELP_PARAMETER)) {
+    return ServeUsage(response, "POST state=[on|off]");
+  }
+
+  bool on;
+  if (!StringToBoolTolerant(request->GetPostParameter("state"), &on)) {
+    JsonObject json;
+    json.Add("error", "state must be on or off");
+    return SendJsonWithStatus(response, 400, json);
+  }
+
+  SystemStats stats;
+  const SystemSnapshot s = stats.Read(time(NULL));
+  JsonObject json;
+  if (!s.has_wifi || !s.wifi.controllable) {
+    json.Add("error", "Wi-Fi can't be switched from here: the ola-plus-net "
+                      "service is not running");
+    return SendJsonWithStatus(response, 503, json);
+  }
+  if (on && s.wifi.hard_blocked) {
+    json.Add("error", "Wi-Fi is switched off by a hardware switch");
+    return SendJsonWithStatus(response, 409, json);
+  }
+  if (!stats.RequestWifi(on)) {
+    json.Add("error", "could not send the request to the ola-plus-net service");
+    return SendJsonWithStatus(response, 500, json);
+  }
+  json.Add("requested", on ? "on" : "off");
+  return SendJsonWithStatus(response, 200, json);
+}
+
+
+/**
+ * @brief The Wi-Fi networks in range and the result of the last attempt to join one.
+ * @param request the HTTPRequest
+ * @param response the HTTPResponse
+ * @returns MHD_NO or MHD_YES
+ */
+int OladHTTPServer::JsonWifiNetworks(const HTTPRequest *request,
+                                     HTTPResponse *response) {
+  if (request->CheckParameterExists(HELP_PARAMETER)) {
+    return ServeUsage(response,
+                      "returns {networks: [{ssid, signal, security, in_use}], "
+                      "scan_age_s, connect: {status, ssid, message, age_s}}");
+  }
+
+  const WifiScan scan = SystemStats().ReadWifiScan(time(NULL));
+  JsonObject json;
+  JsonArray *networks = json.AddArray("networks");
+  for (std::vector<WifiNetwork>::const_iterator i = scan.networks.begin();
+       i != scan.networks.end(); ++i) {
+    JsonObject *n = networks->AppendObject();
+    n->Add("ssid", i->ssid);
+    n->Add("signal", i->signal);
+    n->Add("security", i->security);
+    n->Add("in_use", i->in_use);
+  }
+  if (scan.has_scan) {
+    json.Add("scan_age_s", scan.scan_age_s);
+  }
+  if (scan.has_result) {
+    JsonObject *connect = json.AddObject("connect");
+    connect->Add("status", scan.status);
+    connect->Add("ssid", scan.ssid);
+    connect->Add("message", scan.message);
+    connect->Add("age_s", scan.result_age_s);
+  }
+  return SendJsonWithStatus(response, 200, json);
+}
+
+
+/**
+ * @brief Ask for a new scan of the Wi-Fi networks in range.
+ * @param request the HTTPRequest
+ * @param response the HTTPResponse
+ * @returns MHD_NO or MHD_YES
+ */
+int OladHTTPServer::JsonWifiScan(const HTTPRequest *request,
+                                 HTTPResponse *response) {
+  if (request->CheckParameterExists(HELP_PARAMETER)) {
+    return ServeUsage(response, "POST, no parameters");
+  }
+  JsonObject json;
+  SystemStats stats;
+  const SystemSnapshot s = stats.Read(time(NULL));
+  if (!s.has_wifi || !s.wifi.controllable || !s.wifi.enabled ||
+      !stats.RequestWifiScan()) {
+    json.Add("error", "Wi-Fi is off or can't be controlled from here");
+    return SendJsonWithStatus(response, 503, json);
+  }
+  json.Add("requested", "scan");
+  return SendJsonWithStatus(response, 200, json);
+}
+
+
+/**
+ * @brief Ask to join a Wi-Fi network (WPA/WPA2/WPA3 with a password, or an open one).
+ *
+ * The result shows up in /json/wifi_networks once the ola-plus-net service has tried.
+ * The password is passed on to that service and never logged or kept by olad.
+ * @param request the HTTPRequest
+ * @param response the HTTPResponse
+ * @returns MHD_NO or MHD_YES
+ */
+int OladHTTPServer::JsonWifiConnect(const HTTPRequest *request,
+                                    HTTPResponse *response) {
+  if (request->CheckParameterExists(HELP_PARAMETER)) {
+    return ServeUsage(response,
+                      "POST ssid=[network name], password=[empty for an open "
+                      "network], hidden=[true|false]");
+  }
+
+  const string ssid = request->GetPostParameter("ssid");
+  const string password = request->GetPostParameter("password");
+  bool hidden = false;
+  StringToBoolTolerant(request->GetPostParameter("hidden"), &hidden);
+
+  JsonObject json;
+  const bool bad_char = ssid.find_first_of("\r\n") != string::npos ||
+                        password.find_first_of("\r\n") != string::npos ||
+                        ssid.find('\0') != string::npos;
+  if (ssid.empty() || ssid.size() > 32 || bad_char) {
+    json.Add("error", "the network name must be 1 to 32 characters");
+    return SendJsonWithStatus(response, 400, json);
+  }
+  if (!password.empty() && (password.size() < 8 || password.size() > 63)) {
+    json.Add("error", "a Wi-Fi password is 8 to 63 characters");
+    return SendJsonWithStatus(response, 400, json);
+  }
+
+  SystemStats stats;
+  const SystemSnapshot s = stats.Read(time(NULL));
+  if (!s.has_wifi || !s.wifi.controllable || s.wifi.hard_blocked ||
+      !stats.RequestWifiConnect(ssid, password, hidden)) {
+    json.Add("error", "Wi-Fi can't be controlled from here: the "
+                      "ola-plus-net service is not running");
+    return SendJsonWithStatus(response, 503, json);
+  }
+  json.Add("requested", "connect");
   return SendJsonWithStatus(response, 200, json);
 }
 

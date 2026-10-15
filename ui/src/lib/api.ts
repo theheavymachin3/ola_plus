@@ -236,9 +236,60 @@ export interface SystemStats {
     throttled?: number; // vcgencmd get_throttled bit field
     arm_clock_hz?: number;
   };
+  /** Only on a machine with a Wi-Fi radio. */
+  wifi?: {
+    enabled: boolean;
+    hard_blocked: boolean; // a physical switch holds it off
+    controllable: boolean; // the ola-plus-net service is there to switch it
+  };
 }
 
 export const fetchSystemStats = () => getJson<SystemStats>('/json/system_stats');
+
+/** Asks olad to switch the Wi-Fi radio; the new state shows up in the next system_stats. */
+export const setWifi = (on: boolean) => wifiPost('/json/wifi', { state: on ? 'on' : 'off' });
+
+// --- Wi-Fi networks in range and joining one -------------------------------------------------
+
+export interface WifiNetwork {
+  ssid: string;
+  signal: number; // 0 - 100
+  security: string; // "--" for an open network, else e.g. "WPA2", "WPA3", "WPA2 802.1X"
+  in_use: boolean;
+}
+
+export interface WifiConnectResult {
+  status: 'connecting' | 'ok' | 'failed';
+  ssid: string;
+  message: string;
+  age_s: number;
+}
+
+export interface WifiNetworks {
+  networks: WifiNetwork[];
+  scan_age_s?: number;
+  connect?: WifiConnectResult;
+}
+
+export const fetchWifiNetworks = () => getJson<WifiNetworks>('/json/wifi_networks');
+
+async function wifiPost(path: string, params: Record<string, string>): Promise<void> {
+  const r = await fetch(path, { method: 'POST', body: new URLSearchParams(params) });
+  if (r.ok) return;
+  let msg = `Wi-Fi: ${r.status}`;
+  try {
+    msg = ((await r.json()) as { error?: string }).error || msg;
+  } catch {
+    /* not JSON */
+  }
+  throw new Error(msg);
+}
+
+export const scanWifi = () => wifiPost('/json/wifi_scan', {});
+
+/** An empty password means an open network. The result appears in fetchWifiNetworks().connect. */
+export const connectWifi = (ssid: string, password: string, hidden: boolean) =>
+  wifiPost('/json/wifi_connect', { ssid, password, hidden: hidden ? 'true' : 'false' });
 
 // --- RDM (discovery, DMX addresses, identify) ---------------------------------------------------
 // olad answers these with `error: ""` on success. They are all GET, as in olad's own UI.

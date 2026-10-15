@@ -1,0 +1,21 @@
+[Unit]
+Description=OLA Plus - Wi-Fi control for the web UI (on/off, scan, join)
+Documentation=https://github.com/theheavymachin3/ola_plus
+# Only where the machine has a radio that can be switched.
+ConditionPathExists=/dev/rfkill
+After=olad.service
+
+[Service]
+# rfkill and NetworkManager need root. The script only reads plain-text requests from olad (group olad) and never evaluates them.
+RuntimeDirectory=ola-plus-net
+RuntimeDirectoryMode=0755
+ExecStart=/usr/lib/ola-plus/wifi-switch.sh
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

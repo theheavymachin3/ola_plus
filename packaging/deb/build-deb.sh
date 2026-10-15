@@ -39,6 +39,8 @@ cp -a "$UI"/. "$ROOT/usr/share/olad/www/ui/"
 install -D -m 0644 "$HERE/olad.service" "$ROOT/usr/lib/systemd/system/olad.service"
 install -D -m 0644 "$HERE/ola-plus-sysinfo.service" "$ROOT/usr/lib/systemd/system/ola-plus-sysinfo.service"
 install -D -m 0755 "$HERE/firmware-stats.sh" "$ROOT/usr/lib/ola-plus/firmware-stats.sh"
+install -D -m 0644 "$HERE/ola-plus-net.service" "$ROOT/usr/lib/systemd/system/ola-plus-net.service"
+install -D -m 0755 "$HERE/wifi-switch.sh" "$ROOT/usr/lib/ola-plus/wifi-switch.sh"
 install -D -m 0644 "$REPO/debian/ola.udev" "$ROOT/usr/lib/udev/rules.d/60-ola.rules"
 install -d -m 0755 "$ROOT/etc/ola"
 

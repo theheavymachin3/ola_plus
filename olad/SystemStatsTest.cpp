@@ -26,6 +26,7 @@
 using ola::FirmwareReadings;
 using ola::SystemSnapshot;
 using ola::SystemStats;
+using ola::WifiScan;
 using std::string;
 
 class SystemStatsTest: public CppUnit::TestFixture {
@@ -36,6 +37,9 @@ class SystemStatsTest: public CppUnit::TestFixture {
   CPPUNIT_TEST(testUptime);
   CPPUNIT_TEST(testFirmware);
   CPPUNIT_TEST(testFirmwareTooOld);
+  CPPUNIT_TEST(testRfkillFlag);
+  CPPUNIT_TEST(testWifiNetworks);
+  CPPUNIT_TEST(testWifiResult);
   CPPUNIT_TEST(testMissingRoot);
   CPPUNIT_TEST_SUITE_END();
 
@@ -46,10 +50,54 @@ class SystemStatsTest: public CppUnit::TestFixture {
   void testUptime();
   void testFirmware();
   void testFirmwareTooOld();
+  void testRfkillFlag();
+  void testWifiNetworks();
+  void testWifiResult();
   void testMissingRoot();
 };
 
 CPPUNIT_TEST_SUITE_REGISTRATION(SystemStatsTest);
+
+void SystemStatsTest::testRfkillFlag() {
+  bool blocked = false;
+  OLA_ASSERT_TRUE(SystemStats::ParseRfkillFlag("1\n", &blocked));
+  OLA_ASSERT_TRUE(blocked);
+  OLA_ASSERT_TRUE(SystemStats::ParseRfkillFlag("0\n", &blocked));
+  OLA_ASSERT_FALSE(blocked);
+  OLA_ASSERT_FALSE(SystemStats::ParseRfkillFlag("", &blocked));
+  OLA_ASSERT_FALSE(SystemStats::ParseRfkillFlag("2", &blocked));
+}
+
+void SystemStatsTest::testWifiNetworks() {
+  WifiScan scan;
+  OLA_ASSERT_TRUE(SystemStats::ParseWifiNetworks(
+      "updated=990\nnet\t1\t78\tWPA2\tHome: Net\nnet\t0\t30\t--\tOpen\n"
+      "junk\nnet\t0\t20\tWPA2\t\n",
+      1000, &scan));
+  OLA_ASSERT_TRUE(scan.has_scan);
+  OLA_ASSERT_EQ(10u, scan.scan_age_s);
+  OLA_ASSERT_EQ(static_cast<size_t>(2), scan.networks.size());
+  OLA_ASSERT_EQ(string("Home: Net"), scan.networks[0].ssid);
+  OLA_ASSERT_TRUE(scan.networks[0].in_use);
+  OLA_ASSERT_EQ(78u, scan.networks[0].signal);
+  OLA_ASSERT_EQ(string("--"), scan.networks[1].security);
+  OLA_ASSERT_FALSE(SystemStats::ParseWifiNetworks("net\t0\t1\tWPA2\tx\n",
+                                                  1000, &scan));
+}
+
+void SystemStatsTest::testWifiResult() {
+  WifiScan scan;
+  OLA_ASSERT_TRUE(SystemStats::ParseWifiResult(
+      "time=995\nstatus=failed\nssid=Stage\nmessage=Error: no secrets\n",
+      1000, &scan));
+  OLA_ASSERT_TRUE(scan.has_result);
+  OLA_ASSERT_EQ(5u, scan.result_age_s);
+  OLA_ASSERT_EQ(string("failed"), scan.status);
+  OLA_ASSERT_EQ(string("Stage"), scan.ssid);
+  OLA_ASSERT_EQ(string("Error: no secrets"), scan.message);
+  OLA_ASSERT_FALSE(SystemStats::ParseWifiResult("time=1\nstatus=weird\n",
+                                                1000, &scan));
+}
 
 void SystemStatsTest::testTemperature() {
   double c = 0;
@@ -143,4 +191,5 @@ void SystemStatsTest::testMissingRoot() {
   OLA_ASSERT_FALSE(s.has_load);
   OLA_ASSERT_FALSE(s.has_mem);
   OLA_ASSERT_FALSE(s.has_undervoltage_alarm);
+  OLA_ASSERT_FALSE(s.has_wifi);
 }
