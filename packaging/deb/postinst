@@ -8,8 +8,10 @@ configure)
     getent group olad > /dev/null || addgroup --system olad
     getent passwd olad > /dev/null ||
         adduser --system --home /usr/lib/olad --no-create-home --ingroup olad olad
-    # USB/serial DMX interfaces need these groups.
-    for g in dialout plugdev; do
+    # USB/serial DMX interfaces need dialout and plugdev; the group "olad" is how the daemon
+    # reaches the Wi-Fi service (ola-plus-net), and an olad user that already existed (from the
+    # Debian ola package) has another primary group.
+    for g in dialout plugdev olad; do
         if getent group "$g" > /dev/null && ! id -nG olad | tr ' ' '\n' | grep -qx "$g"; then
             adduser olad "$g"
         fi
